@@ -20,9 +20,13 @@ ENV PYTHONUNBUFFERED=1 \
     GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR \
     HYPERSAT_LOG_FORMAT=json
 
-# libgomp1 is required by the OpenMP-enabled NumPy/OpenCV wheels.
+# The manylinux wheels bundle their own libgdal, PROJ and OpenBLAS, but they are allowed to
+# link against a short list of system libraries without vendoring them. Of that list only
+# libexpat.so.1 (used by GDAL's XML parsing) is missing from python:*-slim, so `import
+# rasterio` fails with "libexpat.so.1: cannot open shared object file" without libexpat1.
+# libz.so.1 is the only other external dependency and the base image already provides it.
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y libgomp1 \
+    && apt-get install --no-install-recommends -y libexpat1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
