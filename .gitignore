@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+install.log
+
+# Environment
+.env
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---------------------------------------------------------------------------
+# Data and results.
+# Satellite products, DEM tiles and generated products are large and must never
+# be committed. Only the placeholder READMEs and .gitkeep files are tracked.
+# ---------------------------------------------------------------------------
+data/raw/*
+!data/raw/.gitkeep
+data/dem/*
+!data/dem/.gitkeep
+data/samples/*
+!data/samples/.gitkeep
+outputs/*
+!outputs/.gitkeep
+
+# Common geospatial artefacts, wherever they land
+*.tif
+*.tiff
+*.jp2
+*.he5
+*.hdf
+*.zip
+*.tar
+*.tar.gz
+!tests/fixtures/**/*.tif

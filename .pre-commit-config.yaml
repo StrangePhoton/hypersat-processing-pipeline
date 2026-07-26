@@ -1,0 +1,39 @@
+# Hooks intentionally mirror the CI quality gates (see .github/workflows/ci.yml).
+# Run `pre-commit install` once, or `pre-commit run --all-files` on demand.
+default_language_version:
+  python: python3
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1
+    hooks:
+      - id: mypy
+        # mypy needs the real dependency set to check rasterio/pydantic call sites.
+        additional_dependencies:
+          - numpy
+          - pandas-stubs
+          - pydantic
+          - types-PyYAML
+          - typer
+        args: ["--config-file=pyproject.toml"]
+        pass_filenames: false

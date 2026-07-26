@@ -1,0 +1,164 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hypersat-processing-pipeline"
+dynamic = ["version"]
+description = "Demonstration pipeline for validating, orthorectifying and analysing hyperspectral satellite imagery."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "HyperSat Processing Pipeline contributors" }]
+keywords = [
+    "earth-observation",
+    "remote-sensing",
+    "hyperspectral",
+    "gdal",
+    "rasterio",
+    "orthorectification",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Typing :: Typed",
+]
+
+# Runtime dependencies are intentionally minimal. The geospatial stack is pinned to
+# major versions that ship binary wheels for every supported Python version, so that
+# `pip install` works without a system GDAL build (see docs/data-sources.md).
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "rasterio>=1.3.9",
+    "opencv-python-headless>=4.9",
+    "pydantic>=2.6",
+    "typer>=0.12",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+# The `osgeo.gdal` Python bindings are NOT a hard dependency: PyPI publishes only an
+# sdist for `gdal`, which requires a matching system GDAL toolchain to compile.
+# Install this extra only in an environment that already provides libgdal
+# (conda-forge, Debian/Ubuntu packages, or the osgeo/gdal Docker image).
+gdal = ["gdal>=3.6"]
+dev = [
+    "mypy>=1.10",
+    "pandas-stubs>=2.1",
+    "pre-commit>=3.7",
+    "pytest>=8.1",
+    "pytest-cov>=5.0",
+    "ruff>=0.5",
+    "types-PyYAML>=6.0",
+]
+
+[project.scripts]
+hypersat = "hypersat.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/your-user/hypersat-processing-pipeline"
+Documentation = "https://github.com/your-user/hypersat-processing-pipeline/tree/main/docs"
+
+[tool.hatch.version]
+path = "src/hypersat/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hypersat"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "A",    # flake8-builtins
+    "C4",   # flake8-comprehensions
+    "DTZ",  # flake8-datetimez
+    "PTH",  # flake8-use-pathlib
+    "SIM",  # flake8-simplify
+    "TID",  # flake8-tidy-imports
+    "RET",  # flake8-return
+    "ARG",  # flake8-unused-arguments
+    "NPY",  # numpy-specific rules
+    "PL",   # pylint
+    "D",    # pydocstyle
+    "ANN",  # flake8-annotations
+    "RUF",
+]
+ignore = [
+    "D105",   # magic methods do not need docstrings
+    "D107",   # __init__ is documented on the class
+    "D203",   # incompatible with D211
+    "D213",   # incompatible with D212
+    "ANN401", # allow typing.Any where a library forces it
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D100", "D103", "PLR2004", "ANN201"]
+# Pydantic deep-copies field defaults, so a literal `[]`/`{}` default is safe here and
+# reads better than wrapping every collection field in `Field(default_factory=...)`.
+"src/hypersat/models/*.py" = ["RUF012"]
+# A Typer command's options are its parameters; the argument-count limits do not apply.
+"src/hypersat/cli.py" = ["PLR0913", "PLR0917"]
+# The synthetic-raster builder is deliberately configurable across many raster properties.
+"tests/support/rasters.py" = ["PLR0912", "PLR0913"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.mypy]
+# NumPy's bundled stubs use PEP 695 `type` statements, which mypy can only parse when it
+# targets 3.12 or newer; analysing them as 3.11 aborts the whole run. Runtime support
+# still starts at 3.11 (see `requires-python`) and is covered by the pytest matrix.
+python_version = "3.12"
+files = ["src", "tests"]
+strict = true
+warn_unreachable = true
+pretty = true
+show_error_codes = true
+plugins = ["pydantic.mypy"]
+
+# Neither rasterio, OpenCV nor the GDAL bindings ship PEP 561 type information.
+[[tool.mypy.overrides]]
+module = ["rasterio.*", "cv2.*", "osgeo.*", "affine.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+# Makes `tests.support` importable without turning the suite into an installed package.
+pythonpath = ["."]
+# `external` tests need multi-GB satellite products that are not in version control,
+# so they are opt-in via `pytest -m external`.
+addopts = "-ra --strict-markers --strict-config -m 'not external'"
+markers = [
+    "integration: exercises several pipeline stages together using generated fixtures",
+    "external: requires a real satellite product or DEM that is not committed to the repository",
+    "gdal_bindings: requires the optional osgeo.gdal Python bindings",
+]
+log_cli_level = "WARNING"
+
+[tool.coverage.run]
+source = ["src/hypersat"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]
