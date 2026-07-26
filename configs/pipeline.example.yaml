@@ -1,0 +1,178 @@
+# =============================================================================
+# HyperSat pipeline configuration - reference example
+#
+# This file is the authoritative description of the configuration schema the
+# pipeline is growing into.
+#
+# NOT YET LOADED. Reading this file and running stages from it is `hypersat
+# process`, which arrives in milestone 7. Today's commands (`inspect`, `validate`)
+# are driven by CLI options, and only the keys a working stage actually reads
+# exist as Pydantic models - a model without code behind it would be a promise,
+# not a feature. Implemented so far, in `hypersat.models.config`:
+#   input.path, input.product_type, input.band_subset, input.wavelengths_nm
+#   output.directory, output.overwrite
+#   stages.validate.* (as `ValidationRequirements`)
+# Everything else below is the intended shape, kept here so the design can be
+# reviewed early and so each milestone has a target to implement against.
+#
+# Paths are resolved relative to the process working directory unless absolute.
+# Stage implementation status is tracked in docs/roadmap.md; a stage that is
+# enabled but not yet implemented will fail loudly rather than silently skipping.
+# =============================================================================
+
+# Schema version of THIS file. Bumped only on breaking configuration changes.
+version: 1
+
+input:
+  # A raster file, or an EnMAP product directory containing metadata + raster files.
+  path: data/raw/enmap_l1b_product
+  # enmap_l1b | geotiff. `geotiff` treats the file as an opaque multi-band raster and
+  # skips EnMAP-specific metadata parsing.
+  product_type: enmap_l1b
+  # Optional 1-based band subset. `null` keeps every band. Use this to keep memory
+  # bounded when experimenting with a 224-band cube.
+  band_subset: null
+  # Optional override when the product metadata has no usable centre wavelengths.
+  # Length must equal the band count. Prefer fixing the metadata over using this.
+  wavelengths_nm: null
+
+output:
+  directory: outputs/enmap_demo
+  # Basename for generated files. `null` derives it from the input product name.
+  # See docs/architecture.md for the full output naming convention.
+  product_id: null
+  # Refuse to overwrite existing files unless true.
+  overwrite: false
+  # GeoTIFF creation options applied to every scientific raster product.
+  geotiff:
+    compression: DEFLATE      # DEFLATE | LZW | ZSTD | NONE
+    predictor: 2              # 1 none, 2 horizontal (integers), 3 floating point
+    tiled: true
+    blockxsize: 512
+    blockysize: 512
+    bigtiff: IF_SAFER         # YES | NO | IF_NEEDED | IF_SAFER
+    build_overviews: false
+
+logging:
+  level: INFO                 # DEBUG | INFO | WARNING | ERROR | CRITICAL
+  format: text                # text | json
+
+# -----------------------------------------------------------------------------
+# Stages run in the fixed order below. Order is a property of the pipeline, not
+# of this file: reordering keys does not reorder execution.
+#
+# The quality mask is built BEFORE orthorectification, in sensor geometry, because
+# saturation and NoData must be detected on original detector samples. Warping the
+# mask afterwards with nearest-neighbour preserves the class codes.
+# -----------------------------------------------------------------------------
+stages:
+
+  # 1. Pre-flight validation. Cheap, metadata-only, no pixel reads.
+  validate:
+    enabled: true
+    require_georeferencing: true
+    # Enforced automatically when `orthorectify.enabled` is true.
+    require_rpc: false
+    require_wavelengths: true
+    # Fail if the product exceeds this uncompressed size, as a guard against
+    # accidentally loading a full cube on a small machine.
+    max_uncompressed_gb: 16.0
+
+  # 2. Quality mask in sensor geometry. Class codes: docs/quality-masks.md
+  quality_mask:
+    enabled: true
+    # Digital numbers at or above this value are treated as detector saturation.
+    # EnMAP L1B DN are 16-bit; adjust to the value documented for your product.
+    saturation_dn: 65535
+    # Digital numbers at or below this value are treated as low signal / shadow.
+    low_signal_dn: 10
+    # Bands used to evaluate saturation and low signal. `null` uses every band,
+    # which is slow on a full cube; wavelengths are matched to the nearest band.
+    evaluation_wavelengths_nm: [490.0, 560.0, 665.0, 842.0]
+    # Fraction of evaluated bands that must be saturated for a pixel to count as
+    # saturated (1.0 = every evaluated band).
+    saturation_band_fraction: 0.5
+    morphology:
+      # Every OpenCV operation is explicit and configurable; none is applied by default.
+      enabled: false
+      operation: close        # none | open | close | dilate | erode
+      kernel_shape: ellipse   # rect | ellipse | cross
+      kernel_size: 3          # odd, in pixels
+      iterations: 1
+
+  # 3. RPC + DEM orthorectification. See docs/orthorectification.md.
+  orthorectify:
+    enabled: true
+    # Required. A DEM is what makes this orthorectification rather than reprojection.
+    dem_path: data/dem/dem_cop30.tif
+    # `auto` selects the UTM zone of the scene centre; otherwise an explicit
+    # authority code such as EPSG:32633.
+    target_crs: auto
+    # Ground sample distance of the output grid, in target-CRS units (metres for UTM).
+    resolution: 30.0
+    resampling: bilinear      # nearest | bilinear | cubic
+    # Categorical rasters are always resampled with nearest-neighbour; this key exists
+    # to make that explicit and reviewable, not to allow interpolation of class codes.
+    mask_resampling: nearest
+    # NoData written to the output. `null` reuses the input NoData when defined.
+    nodata: null
+    # GDAL transformer options, forwarded verbatim and echoed into the QC report.
+    rpc_options:
+      RPC_HEIGHT_SCALE: null      # metres; null = leave at GDAL default
+      RPC_DEM_MISSING_VALUE: null # elevation used where the DEM has no data
+      RPC_DEM_APPLY_VDATUM_SHIFT: false
+    error_threshold_px: 0.125
+    warp_memory_mb: 512
+
+  # 4. Optional reprojection / alignment of the orthorectified product onto an
+  #    existing reference grid (e.g. to stack with another scene).
+  align:
+    enabled: false
+    reference_raster: null    # path to the grid to match, or null
+    target_crs: null
+    resolution: null
+    resampling: bilinear
+    # Snap the output origin to a whole multiple of the resolution.
+    snap_to_grid: true
+
+  # 5. Spectral indices computed from bands selected by wavelength, never by index.
+  spectral_indices:
+    enabled: true
+    indices: [ndvi, ndwi]
+    # Nominal wavelengths (nm) of the bands each index needs. The nearest available
+    # band is selected and the actual centre wavelength is recorded in the QC report.
+    wavelengths_nm:
+      red: 665.0
+      nir: 842.0
+      green: 560.0
+      swir: 1610.0
+    # Reject a match when the nearest band is further away than this, instead of
+    # silently using an unsuitable band.
+    max_wavelength_offset_nm: 15.0
+    output_dtype: float32
+    output_nodata: -9999.0
+
+  # 6. Cosmetic PNG previews. Never affects scientific raster output.
+  preview:
+    enabled: true
+    composites:
+      - name: true_color
+        wavelengths_nm: [665.0, 560.0, 490.0]
+      - name: false_color_nir
+        wavelengths_nm: [842.0, 665.0, 560.0]
+    stretch:
+      lower_percentile: 2.0
+      upper_percentile: 98.0
+      # Percentiles are computed per band unless false (then jointly, preserving colour).
+      per_band: true
+    max_dimension: 2048       # longest preview side in pixels, downsampled if larger
+
+  # 7. Machine-readable quality-control report. Always runs last and, unlike the
+  #    other stages, is also written when an earlier stage failed.
+  report:
+    enabled: true
+    filename: qc_report.json
+    include_band_statistics: true
+    # Statistics on a full 224-band cube are expensive; sample every Nth pixel.
+    statistics_sample_step: 4
+    checksum_algorithm: sha256
