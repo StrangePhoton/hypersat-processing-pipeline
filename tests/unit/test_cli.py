@@ -39,14 +39,21 @@ def test_help_lists_the_implemented_commands(runner: CliRunner) -> None:
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    for command in ("inspect", "validate", "version", "preview"):
+    for command in (
+        "inspect",
+        "validate",
+        "version",
+        "preview",
+        "calculate-index",
+        "spectral-profile",
+    ):
         assert command in result.output
 
 
 def test_help_does_not_advertise_unimplemented_commands(runner: CliRunner) -> None:
     result = runner.invoke(app, ["--help"])
 
-    for planned in ("orthorectify", "calculate-index", "process", "spectral-profile"):
+    for planned in ("orthorectify", "process", "band-statistics"):
         assert planned not in result.output
 
 
@@ -325,3 +332,52 @@ def test_preview_json_reports_the_output_path(
     assert payload["composite"] == "band"
     assert payload["band_indices"] == [2]
     assert Path(payload["path"]).is_file()
+
+
+def test_calculate_index_writes_ndvi(
+    runner: CliRunner, sensor_geometry_raster: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "calculate-index",
+            "--input",
+            str(sensor_geometry_raster),
+            "--output-dir",
+            str(tmp_path),
+            "--index",
+            "ndvi",
+            "--statistics",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert list(tmp_path.glob("*_ndvi.tif"))
+    assert list(tmp_path.glob("*_ndvi_statistics.json"))
+
+
+def test_spectral_profile_cli_writes_csv_and_json(
+    runner: CliRunner, sample_raster: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "spectral-profile",
+            "--input",
+            str(sample_raster),
+            "--output-dir",
+            str(tmp_path),
+            "--row",
+            "1",
+            "--col",
+            "2",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["row"] == 1
+    assert payload["col"] == 2
+    assert Path(payload["csv_path"]).is_file()
+    assert Path(payload["json_path"]).is_file()

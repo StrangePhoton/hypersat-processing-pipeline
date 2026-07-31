@@ -80,9 +80,10 @@ by anything; they import nothing from the package.
 | `hypersat.processing.reprojection` | CRS transform, alignment, resampling choice | 7 |
 | `hypersat.processing.orthorectification` | RPC + DEM warp | 8 |
 | `hypersat.analytics.bands` | Wavelength-to-index selection | 3 (done) |
-| `hypersat.analytics.indices` | NDVI, NDWI with safe division | 5 |
-| `hypersat.analytics.profiles` | Pixel spectral profiles | 5 |
-| `hypersat.analytics.statistics` | Per-band descriptive statistics | 5 |
+| `hypersat.analytics.indices` | NDVI, NDWI with safe division (pure) | 5 (done) |
+| `hypersat.analytics.profiles` | Pixel spectral profiles (pure) | 5 (done) |
+| `hypersat.analytics.statistics` | Per-band descriptive statistics (pure) | 5 (done) |
+| `hypersat.processing.spectral` | Index/profile orchestration, GeoTIFF/CSV/JSON writers | 5 (done) |
 | `hypersat.visualization.stretch` | Percentile stretching (cosmetic only) | 4 (done) |
 | `hypersat.visualization.preprocess` | OpenCV resize and optional Gaussian blur | 4 (done) |
 | `hypersat.visualization.preview` | RGB / false-colour / single-band PNG; `hypersat preview` | 4 (done) |

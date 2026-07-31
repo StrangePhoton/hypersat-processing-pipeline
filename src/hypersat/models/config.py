@@ -22,11 +22,14 @@ from pydantic import Field, field_validator, model_validator
 from hypersat.models.base import StrictModel
 
 __all__ = [
+    "IndexRequest",
     "InputConfig",
     "OutputConfig",
     "PreviewComposite",
     "PreviewRequest",
     "ProductType",
+    "SpectralIndexName",
+    "SpectralProfileRequest",
     "StretchConfig",
     "ValidationRequest",
     "ValidationRequirements",
@@ -35,6 +38,11 @@ __all__ = [
 DEFAULT_LOWER_PERCENTILE = 2.0
 DEFAULT_UPPER_PERCENTILE = 98.0
 RGB_BAND_COUNT = 3
+DEFAULT_INDEX_TOLERANCE_NM = 15.0
+DEFAULT_RED_NM = 665.0
+DEFAULT_NIR_NM = 842.0
+DEFAULT_GREEN_NM = 560.0
+DEFAULT_INDEX_NODATA = -9999.0
 
 
 class ProductType(StrEnum):
@@ -234,3 +242,100 @@ class PreviewRequest(StrictModel):
         elif self.bands is not None and len(self.bands) != RGB_BAND_COUNT:
             raise ValueError("RGB composites expect exactly three band indices")
         return self
+
+
+class SpectralIndexName(StrEnum):
+    """Supported conventional spectral indices."""
+
+    NDVI = "ndvi"
+    NDWI = "ndwi"
+
+
+class IndexRequest(StrictModel):
+    """Everything ``hypersat calculate-index`` needs to know."""
+
+    product_path: Path
+    output: OutputConfig
+    index: SpectralIndexName
+    red_nm: Annotated[float, Field(gt=0.0)] = DEFAULT_RED_NM
+    nir_nm: Annotated[float, Field(gt=0.0)] = DEFAULT_NIR_NM
+    green_nm: Annotated[float, Field(gt=0.0)] = DEFAULT_GREEN_NM
+    tolerance_nm: Annotated[float, Field(ge=0.0)] = DEFAULT_INDEX_TOLERANCE_NM
+    output_nodata: float = DEFAULT_INDEX_NODATA
+    bands: tuple[int, int] | None = None
+    """Optional explicit 1-based band pair ``(minuend, subtrahend)`` overriding wavelengths."""
+    product_id: str | None = None
+    include_statistics: bool = False
+    statistics_sample_step: Annotated[int, Field(ge=1)] = 1
+    proj_autofix: bool = True
+
+    @field_validator("product_path")
+    @classmethod
+    def _expand_product_path(cls, value: Path) -> Path:
+        return value.expanduser()
+
+    @field_validator("bands")
+    @classmethod
+    def _validate_band_pair(cls, value: tuple[int, int] | None) -> tuple[int, int] | None:
+        if value is None:
+            return None
+        if any(index < 1 for index in value):
+            raise ValueError("band indices are 1-based")
+        return value
+
+    @field_validator("product_id")
+    @classmethod
+    def _validate_product_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("product_id must not be empty")
+        return cleaned
+
+
+class SpectralProfileRequest(StrictModel):
+    """Everything ``hypersat spectral-profile`` needs to know."""
+
+    product_path: Path
+    output: OutputConfig
+    row: Annotated[int, Field(ge=0)]
+    col: Annotated[int, Field(ge=0)]
+    window_size: Annotated[int, Field(ge=1)] = 1
+    bands: tuple[int, ...] | None = None
+    product_id: str | None = None
+    proj_autofix: bool = True
+
+    @field_validator("product_path")
+    @classmethod
+    def _expand_product_path(cls, value: Path) -> Path:
+        return value.expanduser()
+
+    @field_validator("window_size")
+    @classmethod
+    def _odd_window(cls, value: int) -> int:
+        if value % 2 == 0:
+            raise ValueError("window_size must be a positive odd integer")
+        return value
+
+    @field_validator("bands")
+    @classmethod
+    def _validate_bands(cls, value: tuple[int, ...] | None) -> tuple[int, ...] | None:
+        if value is None:
+            return None
+        if not value:
+            raise ValueError("bands must not be empty")
+        invalid = sorted({index for index in value if index < 1})
+        if invalid:
+            raise ValueError(f"band indices are 1-based; got {invalid}")
+        return value
+
+    @field_validator("product_id")
+    @classmethod
+    def _validate_product_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("product_id must not be empty")
+        return cleaned

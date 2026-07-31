@@ -9,7 +9,6 @@ still apply), stretches in :mod:`hypersat.visualization.stretch`, optionally blu
 from __future__ import annotations
 
 import os
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +25,7 @@ from hypersat.exceptions import (
     PreviewError,
 )
 from hypersat.io.environment import ensure_usable_proj_data
+from hypersat.io.files import derive_product_id
 from hypersat.io.inspect import inspect_raster, resolve_raster_path
 from hypersat.io.reader import DEFAULT_READ_BUDGET_BYTES, ReadOptions, read_chunk
 from hypersat.logging_config import get_logger
@@ -49,7 +49,6 @@ __all__ = [
 
 logger = get_logger(__name__)
 
-_SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
 _IMAGE_NDIM_GREY = 2
 _IMAGE_NDIM_COLOR = 3
 
@@ -75,26 +74,6 @@ class PreviewResult:
     width: int
     height: int
     product_id: str
-
-
-def derive_product_id(path: Path) -> str:
-    """Derive a filesystem-safe product id from an input path.
-
-    Args:
-        path: Raster file or product directory.
-
-    Returns:
-        A lower-case ASCII slug; falls back to ``"product"`` if nothing usable remains.
-    """
-    # Use the stem for anything that looks like a file (has a suffix), including paths
-    # that do not exist yet. ``is_file()`` would be wrong for a not-yet-checked path and
-    # would leave the extension in the slug.
-    if path.exists():
-        token = path.stem if path.is_file() else path.name
-    else:
-        token = path.stem if path.suffix else path.name
-    slug = _SLUG_PATTERN.sub("_", token.lower()).strip("_")
-    return slug or "product"
 
 
 def write_png(

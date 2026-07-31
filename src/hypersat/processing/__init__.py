@@ -1,8 +1,10 @@
-"""Geometric and quality processing stages.
+"""Geometric, quality and spectral processing stages.
 
 Modules:
 
 * ``validation`` - pre-flight product, DEM and output-path checks (implemented).
+* ``spectral`` - index and profile orchestration over the analytics pure functions
+  (implemented).
 * ``quality_mask`` - quality-class raster generation (milestone 6, see
   ``docs/quality-masks.md``).
 * ``reprojection`` - CRS transformation, grid alignment and resampling selection

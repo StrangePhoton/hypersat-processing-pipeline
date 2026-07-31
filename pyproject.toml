@@ -114,6 +114,9 @@ ignore = [
 "src/hypersat/models/*.py" = ["RUF012"]
 # A Typer command's options are its parameters; the argument-count limits do not apply.
 "src/hypersat/cli.py" = ["PLR0913", "PLR0917"]
+# Pure analytics helpers take arrays plus several keyword-only controls by design.
+"src/hypersat/analytics/profiles.py" = ["PLR0913"]
+"src/hypersat/analytics/statistics.py" = ["PLR0913"]
 # The synthetic-raster builder is deliberately configurable across many raster properties.
 "tests/support/rasters.py" = ["PLR0912", "PLR0913"]
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import re
 from pathlib import Path
 
 from hypersat.exceptions import RasterReadError
@@ -16,6 +17,7 @@ from hypersat.models.product import FileInfo
 
 __all__ = [
     "CHUNK_SIZE_BYTES",
+    "derive_product_id",
     "describe_file",
     "directory_size_bytes",
     "format_bytes",
@@ -27,6 +29,27 @@ CHUNK_SIZE_BYTES = 1 << 20
 
 _UNITS = ("B", "KiB", "MiB", "GiB", "TiB", "PiB")
 _UNIT_STEP = 1024.0
+_SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
+
+
+def derive_product_id(path: Path) -> str:
+    """Derive a filesystem-safe product id from an input path.
+
+    Args:
+        path: Raster file or product directory.
+
+    Returns:
+        A lower-case ASCII slug; falls back to ``"product"`` if nothing usable remains.
+    """
+    # Use the stem for anything that looks like a file (has a suffix), including paths
+    # that do not exist yet. ``is_file()`` would be wrong for a not-yet-checked path and
+    # would leave the extension in the slug.
+    if path.exists():
+        token = path.stem if path.is_file() else path.name
+    else:
+        token = path.stem if path.suffix else path.name
+    slug = _SLUG_PATTERN.sub("_", token.lower()).strip("_")
+    return slug or "product"
 
 
 def format_bytes(size_bytes: int) -> str:

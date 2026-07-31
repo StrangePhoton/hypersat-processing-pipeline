@@ -30,7 +30,9 @@ reflects what actually runs today — planned features are marked as such, not a
 | Atomic tiled/compressed GeoTIFF writing | library API | Working |
 | Wavelength-based band selection | library API | Working |
 | Percentile-stretched PNG previews | `hypersat preview` | Working |
-| NDVI / NDWI, spectral profiles, band statistics | `hypersat calculate-index`, `hypersat spectral-profile` | Planned (milestone 5) |
+| NDVI / NDWI (wavelength-selected bands) | `hypersat calculate-index` | Working |
+| Pixel spectral profiles | `hypersat spectral-profile` | Working |
+| Per-band / index descriptive statistics | library API (+ `--statistics` on calculate-index) | Working |
 | Quality mask | `hypersat process` stage | Planned (milestone 6) |
 | Reprojection and grid alignment | library API | Planned (milestone 7) |
 | RPC + DEM orthorectification | `hypersat orthorectify` | Planned (milestone 8) |
@@ -213,6 +215,16 @@ hypersat preview --input data/samples/scene.tif --output-dir outputs/preview \
                  --composite band --band 42 --max-dimension 1024
 hypersat preview --input data/samples/scene.tif --output-dir outputs/preview \
                  --bands 40,30,20 --blur-kernel 3 --overwrite
+
+# Conventional broadband indices on wavelength-selected bands. Not hyperspectral algorithms.
+hypersat calculate-index --input data/samples/scene.tif --output-dir outputs/indices \
+                         --index ndvi --statistics
+hypersat calculate-index --input data/samples/scene.tif --output-dir outputs/indices \
+                         --index ndwi
+
+# Spectrum at one pixel (0-based row/col). Writes CSV + JSON.
+hypersat spectral-profile --input data/samples/scene.tif --output-dir outputs/profiles \
+                          --row 120 --col 80 --window-size 1
 ```
 
 `--json` writes to stdout while logs and diagnostics go to stderr, so a `--json` run can be

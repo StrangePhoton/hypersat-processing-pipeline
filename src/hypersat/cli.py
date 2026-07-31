@@ -24,14 +24,18 @@ from hypersat.io.environment import describe_environment
 from hypersat.io.inspect import inspect_input
 from hypersat.logging_config import LogFormat, configure_logging, get_logger
 from hypersat.models.config import (
+    IndexRequest,
     InputConfig,
     OutputConfig,
     PreviewComposite,
     PreviewRequest,
+    SpectralIndexName,
+    SpectralProfileRequest,
     StretchConfig,
     ValidationRequest,
     ValidationRequirements,
 )
+from hypersat.processing.spectral import calculate_index, extract_spectral_profile
 from hypersat.processing.validation import raise_if_invalid, validate_request
 from hypersat.visualization.preview import render_preview
 
@@ -435,6 +439,210 @@ def preview(
     typer.echo(
         f"wrote {result.path} ({result.width}x{result.height} px, "
         f"bands {','.join(str(index) for index in result.band_indices)})"
+    )
+
+
+_INDEX_BAND_COUNT = 2
+
+
+def _parse_index_band_pair(raw: str | None) -> tuple[int, int] | None:
+    """Parse ``--bands`` for an index command into a minuend/subtrahend pair."""
+    indices = _parse_band_indices(raw)
+    if indices is None:
+        return None
+    if len(indices) != _INDEX_BAND_COUNT:
+        raise typer.BadParameter(
+            "Spectral indices need exactly two band indices (minuend,subtrahend).",
+            param_hint="--bands",
+        )
+    return indices[0], indices[1]
+
+
+@app.command("calculate-index")
+def calculate_index_command(
+    input_path: InputOption,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory that receives the index GeoTIFF.",
+            show_default=False,
+        ),
+    ],
+    index: Annotated[
+        SpectralIndexName,
+        typer.Option("--index", help="Index to compute: ndvi or ndwi."),
+    ] = SpectralIndexName.NDVI,
+    bands: BandsOption = None,
+    red_nm: Annotated[
+        float,
+        typer.Option("--red-nm", help="Target red wavelength in nanometres (NDVI)."),
+    ] = 665.0,
+    nir_nm: Annotated[
+        float,
+        typer.Option("--nir-nm", help="Target near-infrared wavelength in nanometres."),
+    ] = 842.0,
+    green_nm: Annotated[
+        float,
+        typer.Option("--green-nm", help="Target green wavelength in nanometres (NDWI)."),
+    ] = 560.0,
+    tolerance_nm: Annotated[
+        float,
+        typer.Option(
+            "--tolerance-nm",
+            min=0.0,
+            help="Maximum accepted distance from each target wavelength.",
+        ),
+    ] = 15.0,
+    nodata: Annotated[
+        float,
+        typer.Option("--nodata", help="NoData value written into the float32 GeoTIFF."),
+    ] = -9999.0,
+    statistics: Annotated[
+        bool,
+        typer.Option(
+            "--statistics/--no-statistics",
+            help="Also write a JSON summary of the index raster's valid pixels.",
+        ),
+    ] = False,
+    product_id: Annotated[
+        str | None,
+        typer.Option(
+            "--product-id",
+            help="Filename token; derived from the input path when omitted.",
+            show_default=False,
+        ),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace an existing index GeoTIFF."),
+    ] = False,
+    as_json: JsonFlag = False,
+    proj_autofix: ProjAutofixOption = True,
+) -> None:
+    """Compute NDVI or NDWI and write a float32 GeoTIFF.
+
+    Bands are chosen by wavelength when the product carries them. These are conventional
+    broadband indices applied to two selected hyperspectral bands - not hyperspectral
+    algorithms in their own right.
+    """
+    request = _build_model(
+        IndexRequest,
+        product_path=input_path,
+        output=_build_model(OutputConfig, directory=output_dir, overwrite=overwrite),
+        index=index,
+        bands=_parse_index_band_pair(bands),
+        red_nm=red_nm,
+        nir_nm=nir_nm,
+        green_nm=green_nm,
+        tolerance_nm=tolerance_nm,
+        output_nodata=nodata,
+        include_statistics=statistics,
+        product_id=product_id,
+        proj_autofix=proj_autofix,
+    )
+    result = calculate_index(request)
+    payload = {
+        "path": str(result.path),
+        "index": result.index.value,
+        "band_indices": list(result.band_indices),
+        "wavelengths_nm": list(result.wavelengths_nm),
+        "nodata": result.nodata,
+        "product_id": result.product_id,
+        "statistics_path": None if result.statistics_path is None else str(result.statistics_path),
+        "statistics": None if result.statistics is None else result.statistics.to_dict(),
+    }
+    if as_json:
+        typer.echo(json.dumps(payload, indent=2))
+        return
+    typer.echo(
+        f"wrote {result.path} ({result.index.value}, "
+        f"bands {result.band_indices[0]},{result.band_indices[1]})"
+    )
+    if result.statistics_path is not None:
+        typer.echo(f"wrote {result.statistics_path}")
+
+
+@app.command("spectral-profile")
+def spectral_profile_command(
+    input_path: InputOption,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory that receives the CSV and JSON profile files.",
+            show_default=False,
+        ),
+    ],
+    row: Annotated[
+        int,
+        typer.Option("--row", min=0, help="Zero-based row of the sample pixel."),
+    ],
+    col: Annotated[
+        int,
+        typer.Option("--col", min=0, help="Zero-based column of the sample pixel."),
+    ],
+    window_size: Annotated[
+        int,
+        typer.Option(
+            "--window-size",
+            min=1,
+            help="Odd neighbourhood size; 1 is a single pixel, larger averages neighbours.",
+        ),
+    ] = 1,
+    bands: BandsOption = None,
+    product_id: Annotated[
+        str | None,
+        typer.Option(
+            "--product-id",
+            help="Filename token; derived from the input path when omitted.",
+            show_default=False,
+        ),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace existing profile outputs."),
+    ] = False,
+    as_json: JsonFlag = False,
+    proj_autofix: ProjAutofixOption = True,
+) -> None:
+    """Extract the spectrum at one pixel and write CSV + JSON.
+
+    Coordinates are pixel indices, not map coordinates. Use --window-size with an odd
+    value to average a small neighbourhood around the centre pixel.
+    """
+    request = _build_model(
+        SpectralProfileRequest,
+        product_path=input_path,
+        output=_build_model(OutputConfig, directory=output_dir, overwrite=overwrite),
+        row=row,
+        col=col,
+        window_size=window_size,
+        bands=_parse_band_indices(bands),
+        product_id=product_id,
+        proj_autofix=proj_autofix,
+    )
+    result = extract_spectral_profile(request)
+    payload = {
+        "product_id": result.product_id,
+        "row": result.profile.row,
+        "col": result.profile.col,
+        "window_size": result.profile.window_size,
+        "band_indices": list(result.profile.band_indices),
+        "wavelengths_nm": list(result.profile.wavelengths_nm),
+        "values": list(result.profile.values),
+        "csv_path": str(result.csv_path),
+        "json_path": str(result.json_path),
+    }
+    if as_json:
+        typer.echo(json.dumps(payload, indent=2))
+        return
+    typer.echo(
+        f"wrote {result.csv_path} and {result.json_path} "
+        f"(row={result.profile.row}, col={result.profile.col}, "
+        f"{len(result.profile.values)} band(s))"
     )
 
 
