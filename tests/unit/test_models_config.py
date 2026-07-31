@@ -11,7 +11,10 @@ from pydantic import ValidationError
 from hypersat.models.config import (
     InputConfig,
     OutputConfig,
+    PreviewComposite,
+    PreviewRequest,
     ProductType,
+    StretchConfig,
     ValidationRequest,
     ValidationRequirements,
 )
@@ -109,3 +112,37 @@ def test_validation_request_defaults() -> None:
     assert request.output is None
     assert request.treat_warnings_as_errors is False
     assert request.proj_autofix is True
+
+
+def test_preview_request_preserves_band_order() -> None:
+    request = PreviewRequest(
+        product_path=Path("scene.tif"),
+        output=OutputConfig(directory=Path("outputs")),
+        bands=(3, 1, 2),
+    )
+
+    assert request.bands == (3, 1, 2)
+    assert request.composite is PreviewComposite.TRUE_COLOR
+
+
+def test_preview_band_composite_requires_a_band() -> None:
+    with pytest.raises(ValidationError, match="requires band"):
+        PreviewRequest(
+            product_path=Path("scene.tif"),
+            output=OutputConfig(directory=Path("outputs")),
+            composite=PreviewComposite.BAND,
+        )
+
+
+def test_stretch_percentiles_must_be_ordered() -> None:
+    with pytest.raises(ValidationError, match="strictly less"):
+        StretchConfig(lower_percentile=90.0, upper_percentile=10.0)
+
+
+def test_blur_kernel_must_be_odd() -> None:
+    with pytest.raises(ValidationError, match="odd"):
+        PreviewRequest(
+            product_path=Path("scene.tif"),
+            output=OutputConfig(directory=Path("outputs")),
+            blur_kernel=4,
+        )

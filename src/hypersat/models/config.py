@@ -1,8 +1,8 @@
 """Configuration models.
 
 Only the configuration that the currently implemented commands actually consume lives
-here. Stage options for orthorectification, masking, indices and previews are documented
-in ``configs/pipeline.example.yaml`` and become models when their stages are implemented,
+here. Stage options for orthorectification, masking and indices are documented in
+``configs/pipeline.example.yaml`` and become models when their stages are implemented,
 so that no model exists without code that reads it.
 
 Validation errors from these models are surfaced by the CLI as
@@ -15,19 +15,26 @@ import math
 from enum import StrEnum
 from itertools import pairwise
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Self
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from hypersat.models.base import StrictModel
 
 __all__ = [
     "InputConfig",
     "OutputConfig",
+    "PreviewComposite",
+    "PreviewRequest",
     "ProductType",
+    "StretchConfig",
     "ValidationRequest",
     "ValidationRequirements",
 ]
+
+DEFAULT_LOWER_PERCENTILE = 2.0
+DEFAULT_UPPER_PERCENTILE = 98.0
+RGB_BAND_COUNT = 3
 
 
 class ProductType(StrEnum):
@@ -41,6 +48,14 @@ class ProductType(StrEnum):
 
     GEOTIFF = "geotiff"
     """An opaque multi-band raster; no mission-specific metadata interpretation."""
+
+
+class PreviewComposite(StrEnum):
+    """Which cosmetic composite a preview request produces."""
+
+    TRUE_COLOR = "true-color"
+    FALSE_COLOR = "false-color"
+    BAND = "band"
 
 
 class InputConfig(StrictModel):
@@ -137,3 +152,85 @@ class ValidationRequest(StrictModel):
     @classmethod
     def _expand_dem_path(cls, value: Path | None) -> Path | None:
         return value.expanduser() if value is not None else None
+
+
+class StretchConfig(StrictModel):
+    """Percentile stretch applied when building a cosmetic preview."""
+
+    lower_percentile: Annotated[float, Field(ge=0.0, lt=100.0)] = DEFAULT_LOWER_PERCENTILE
+    upper_percentile: Annotated[float, Field(gt=0.0, le=100.0)] = DEFAULT_UPPER_PERCENTILE
+    per_band: bool = True
+    """When true, each band is stretched independently; when false, one shared range is used."""
+
+    @model_validator(mode="after")
+    def _ordered_percentiles(self) -> Self:
+        if self.lower_percentile >= self.upper_percentile:
+            raise ValueError("lower_percentile must be strictly less than upper_percentile")
+        return self
+
+
+class PreviewRequest(StrictModel):
+    """Everything ``hypersat preview`` needs to know.
+
+    Band order is significant for RGB composites, so this model keeps an ordered
+    ``bands`` field instead of reusing :attr:`InputConfig.band_subset`, which sorts.
+    """
+
+    product_path: Path
+    output: OutputConfig
+    composite: PreviewComposite = PreviewComposite.TRUE_COLOR
+    bands: tuple[int, ...] | None = None
+    """Explicit 1-based band indices in display order. Overrides wavelength selection."""
+    band: Annotated[int, Field(ge=1)] | None = None
+    """Explicit band for :attr:`PreviewComposite.BAND` when ``bands`` is omitted."""
+    stretch: StretchConfig = StretchConfig()
+    max_dimension: Annotated[int, Field(gt=0)] = 2048
+    blur_kernel: Annotated[int, Field(gt=0)] | None = None
+    product_id: str | None = None
+    proj_autofix: bool = True
+    wavelength_tolerance_nm: Annotated[float, Field(ge=0.0)] = 30.0
+
+    @field_validator("product_path")
+    @classmethod
+    def _expand_product_path(cls, value: Path) -> Path:
+        return value.expanduser()
+
+    @field_validator("bands")
+    @classmethod
+    def _validate_bands(cls, value: tuple[int, ...] | None) -> tuple[int, ...] | None:
+        if value is None:
+            return None
+        if not value:
+            raise ValueError("bands must not be empty")
+        invalid = sorted({index for index in value if index < 1})
+        if invalid:
+            raise ValueError(f"band indices are 1-based; got {invalid}")
+        return value
+
+    @field_validator("blur_kernel")
+    @classmethod
+    def _odd_blur_kernel(cls, value: int | None) -> int | None:
+        if value is not None and value % 2 == 0:
+            raise ValueError("blur_kernel must be a positive odd integer")
+        return value
+
+    @field_validator("product_id")
+    @classmethod
+    def _validate_product_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("product_id must not be empty")
+        return cleaned
+
+    @model_validator(mode="after")
+    def _composite_arguments(self) -> Self:
+        if self.composite is PreviewComposite.BAND:
+            if self.bands is None and self.band is None:
+                raise ValueError("composite 'band' requires band or bands")
+            if self.bands is not None and len(self.bands) != 1:
+                raise ValueError("composite 'band' expects exactly one band index")
+        elif self.bands is not None and len(self.bands) != RGB_BAND_COUNT:
+            raise ValueError("RGB composites expect exactly three band indices")
+        return self

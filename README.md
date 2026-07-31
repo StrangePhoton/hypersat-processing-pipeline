@@ -29,7 +29,7 @@ reflects what actually runs today — planned features are marked as such, not a
 | Windowed / band-selective raster reading | library API | Working |
 | Atomic tiled/compressed GeoTIFF writing | library API | Working |
 | Wavelength-based band selection | library API | Working |
-| Percentile-stretched previews | `hypersat preview` | Planned (milestone 4) |
+| Percentile-stretched PNG previews | `hypersat preview` | Working |
 | NDVI / NDWI, spectral profiles, band statistics | `hypersat calculate-index`, `hypersat spectral-profile` | Planned (milestone 5) |
 | Quality mask | `hypersat process` stage | Planned (milestone 6) |
 | Reprojection and grid alignment | library API | Planned (milestone 7) |
@@ -203,6 +203,16 @@ hypersat validate --input data/raw/enmap_l1b_product \
 
 hypersat validate --input data/samples/scene.tif --json
 hypersat validate --input data/samples/scene.tif --strict   # warnings become failures
+
+# Cosmetic PNG preview. Never writes a GeoTIFF and never changes scientific values.
+# true-color / false-color bands are chosen by wavelength; pass --bands to override.
+hypersat preview --input data/samples/scene.tif --output-dir outputs/preview
+hypersat preview --input data/samples/scene.tif --output-dir outputs/preview \
+                 --composite false-color
+hypersat preview --input data/samples/scene.tif --output-dir outputs/preview \
+                 --composite band --band 42 --max-dimension 1024
+hypersat preview --input data/samples/scene.tif --output-dir outputs/preview \
+                 --bands 40,30,20 --blur-kernel 3 --overwrite
 ```
 
 `--json` writes to stdout while logs and diagnostics go to stderr, so a `--json` run can be

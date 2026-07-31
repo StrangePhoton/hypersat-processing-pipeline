@@ -83,8 +83,9 @@ by anything; they import nothing from the package.
 | `hypersat.analytics.indices` | NDVI, NDWI with safe division | 5 |
 | `hypersat.analytics.profiles` | Pixel spectral profiles | 5 |
 | `hypersat.analytics.statistics` | Per-band descriptive statistics | 5 |
-| `hypersat.visualization.stretch` | Percentile stretching | 4 |
-| `hypersat.visualization.preview` | RGB / false-colour / single-band PNG | 4 |
+| `hypersat.visualization.stretch` | Percentile stretching (cosmetic only) | 4 (done) |
+| `hypersat.visualization.preprocess` | OpenCV resize and optional Gaussian blur | 4 (done) |
+| `hypersat.visualization.preview` | RGB / false-colour / single-band PNG; `hypersat preview` | 4 (done) |
 | `hypersat.pipeline.stage` | `Stage` protocol, `StageContext`, `StageResult` | 9 |
 | `hypersat.pipeline.runner` | Sequential executor, timing, failure isolation | 9 |
 | `hypersat.pipeline.registry` | Config key to stage mapping | 9 |

@@ -26,10 +26,14 @@ from hypersat.logging_config import LogFormat, configure_logging, get_logger
 from hypersat.models.config import (
     InputConfig,
     OutputConfig,
+    PreviewComposite,
+    PreviewRequest,
+    StretchConfig,
     ValidationRequest,
     ValidationRequirements,
 )
 from hypersat.processing.validation import raise_if_invalid, validate_request
+from hypersat.visualization.preview import render_preview
 
 logger = get_logger(__name__)
 
@@ -313,6 +317,125 @@ def validate(
     else:
         typer.echo(render_validation_report(report))
     raise_if_invalid(report)
+
+
+@app.command()
+def preview(
+    input_path: InputOption,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory that receives the PNG preview.",
+            show_default=False,
+        ),
+    ],
+    composite: Annotated[
+        PreviewComposite,
+        typer.Option(
+            "--composite",
+            help="Composite to render: true-color, false-color, or band.",
+        ),
+    ] = PreviewComposite.TRUE_COLOR,
+    band: Annotated[
+        int | None,
+        typer.Option(
+            "--band",
+            min=1,
+            help="1-based band index for --composite band.",
+            show_default=False,
+        ),
+    ] = None,
+    bands: BandsOption = None,
+    lower_percentile: Annotated[
+        float,
+        typer.Option("--lower-percentile", min=0.0, max=99.9, help="Lower stretch percentile."),
+    ] = 2.0,
+    upper_percentile: Annotated[
+        float,
+        typer.Option("--upper-percentile", min=0.1, max=100.0, help="Upper stretch percentile."),
+    ] = 98.0,
+    per_band: Annotated[
+        bool,
+        typer.Option(
+            "--per-band/--joint",
+            help="Stretch each band independently, or use one shared range across bands.",
+        ),
+    ] = True,
+    max_dimension: Annotated[
+        int,
+        typer.Option(
+            "--max-dimension",
+            min=1,
+            help="Longest preview side in pixels; larger inputs are downsampled while reading.",
+        ),
+    ] = 2048,
+    blur_kernel: Annotated[
+        int | None,
+        typer.Option(
+            "--blur-kernel",
+            min=1,
+            help="Odd Gaussian kernel size in pixels. Omit to skip blur.",
+            show_default=False,
+        ),
+    ] = None,
+    product_id: Annotated[
+        str | None,
+        typer.Option(
+            "--product-id",
+            help="Filename token; derived from the input path when omitted.",
+            show_default=False,
+        ),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace an existing preview PNG."),
+    ] = False,
+    as_json: JsonFlag = False,
+    proj_autofix: ProjAutofixOption = True,
+) -> None:
+    """Write a percentile-stretched PNG preview. Never modifies scientific rasters.
+
+    Bands for true-color and false-color composites are chosen by wavelength when the
+    product carries them; pass --bands to override. Large rasters are downsampled to
+    --max-dimension while reading, so a hyperspectral cube is not loaded at full size.
+    """
+    request = _build_model(
+        PreviewRequest,
+        product_path=input_path,
+        output=_build_model(OutputConfig, directory=output_dir, overwrite=overwrite),
+        composite=composite,
+        bands=_parse_band_indices(bands),
+        band=band,
+        stretch=_build_model(
+            StretchConfig,
+            lower_percentile=lower_percentile,
+            upper_percentile=upper_percentile,
+            per_band=per_band,
+        ),
+        max_dimension=max_dimension,
+        blur_kernel=blur_kernel,
+        product_id=product_id,
+        proj_autofix=proj_autofix,
+    )
+    result = render_preview(request)
+    payload = {
+        "path": str(result.path),
+        "composite": result.composite.value,
+        "band_indices": list(result.band_indices),
+        "wavelengths_nm": list(result.wavelengths_nm),
+        "width": result.width,
+        "height": result.height,
+        "product_id": result.product_id,
+    }
+    if as_json:
+        typer.echo(json.dumps(payload, indent=2))
+        return
+    typer.echo(
+        f"wrote {result.path} ({result.width}x{result.height} px, "
+        f"bands {','.join(str(index) for index in result.band_indices)})"
+    )
 
 
 def main() -> None:

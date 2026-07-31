@@ -48,6 +48,7 @@ __all__ = [
     "OrthorectificationError",
     "OutputPathError",
     "PipelineError",
+    "PreviewError",
     "ProcessingError",
     "ProductStructureError",
     "ProductValidationError",
@@ -201,6 +202,14 @@ class QualityMaskError(ProcessingError):
 
 class SpectralAnalysisError(ProcessingError):
     """A spectral index, profile extraction or statistics computation failed."""
+
+
+class PreviewError(ProcessingError):
+    """Cosmetic preview generation failed.
+
+    Previews never write scientific rasters; this error means the PNG (or the stretch /
+    band selection behind it) could not be produced. The underlying GeoTIFF is untouched.
+    """
 
 
 class PipelineError(HyperSatError):

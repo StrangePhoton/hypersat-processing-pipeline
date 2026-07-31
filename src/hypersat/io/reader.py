@@ -81,24 +81,36 @@ class ReadOptions:
         max_bytes: Refuse reads whose result would exceed this many bytes. ``None``
             disables the guard, which is only appropriate when the caller has already
             reasoned about the size.
+        out_shape: Optional ``(height, width)`` to resample into while reading. GDAL
+            performs the resampling, so a preview can ask for a 2048-pixel long side
+            without ever allocating the full-resolution cube. The chunk's ``window``
+            still describes the *source* region; only ``data.shape`` reflects the
+            resampled size.
     """
 
     masked: bool = True
     as_float32: bool = False
     fill_nan: bool = False
     max_bytes: int | None = DEFAULT_READ_BUDGET_BYTES
+    out_shape: tuple[int, int] | None = None
 
     def __post_init__(self) -> None:
         """Reject combinations that cannot be honoured.
 
         Raises:
-            ValueError: If NaN filling is requested without a masked read, or the budget
-                is not positive.
+            ValueError: If NaN filling is requested without a masked read, the budget
+                is not positive, or ``out_shape`` is invalid.
         """
         if self.fill_nan and not self.masked:
             raise ValueError("fill_nan requires masked=True; there is no mask to apply otherwise")
         if self.max_bytes is not None and self.max_bytes <= 0:
             raise ValueError(f"max_bytes must be positive or None, got {self.max_bytes}")
+        if self.out_shape is not None:
+            height, width = self.out_shape
+            if height <= 0 or width <= 0:
+                raise ValueError(
+                    f"out_shape dimensions must be positive, got height={height}, width={width}"
+                )
 
     @property
     def output_dtype(self) -> str | None:
@@ -316,6 +328,19 @@ def _to_rasterio_window(window: ReadWindow) -> Window:
     )
 
 
+def _result_window(window: ReadWindow, options: ReadOptions) -> ReadWindow:
+    """Return the window that describes the array shape after an optional resample."""
+    if options.out_shape is None:
+        return window
+    height, width = options.out_shape
+    return ReadWindow(
+        col_off=window.col_off,
+        row_off=window.row_off,
+        width=width,
+        height=height,
+    )
+
+
 def _read_from_dataset(
     dataset: Any,
     path: Path,
@@ -325,18 +350,24 @@ def _read_from_dataset(
 ) -> RasterChunk:
     """Read one window from an already-open dataset and wrap it in a chunk."""
     dtype = options.output_dtype or _widest_dtype(dataset, indices)
-    estimate = estimate_read_bytes(window, len(indices), dtype, masked=options.masked)
+    result_window = _result_window(window, options)
+    estimate = estimate_read_bytes(result_window, len(indices), dtype, masked=options.masked)
     _check_budget(estimate, options, path, window)
 
     rio_window = _to_rasterio_window(window)
+    read_kwargs: dict[str, Any] = {
+        "indexes": list(indices),
+        "window": rio_window,
+        "masked": options.masked,
+        "out_dtype": options.output_dtype,
+    }
+    if options.out_shape is not None:
+        height, width = options.out_shape
+        read_kwargs["out_shape"] = (len(indices), height, width)
+
     try:
-        data: npt.NDArray[Any] = dataset.read(
-            indexes=list(indices),
-            window=rio_window,
-            masked=options.masked,
-            out_dtype=options.output_dtype,
-        )
-    except (RasterioIOError, MemoryError) as error:
+        data: npt.NDArray[Any] = dataset.read(**read_kwargs)
+    except (RasterioIOError, MemoryError, ValueError) as error:
         raise RasterReadError(
             "Could not read the requested window.",
             hint="The file may be truncated or the block it needs may be corrupt; "
@@ -352,10 +383,13 @@ def _read_from_dataset(
     if options.fill_nan:
         data = np.ma.filled(data, np.nan)
 
+    # RasterChunk requires data.shape[-2:] == window.shape. When GDAL resamples into
+    # out_shape the array no longer matches the source window, so the chunk carries a
+    # window that describes the *result* grid while source_width/height stay original.
     return RasterChunk(
         data=data,
         band_indices=indices,
-        window=window,
+        window=result_window,
         source_width=int(dataset.width),
         source_height=int(dataset.height),
         metadata=_chunk_metadata(dataset, indices, rio_window, path),

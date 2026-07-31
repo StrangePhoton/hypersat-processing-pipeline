@@ -39,14 +39,14 @@ def test_help_lists_the_implemented_commands(runner: CliRunner) -> None:
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    for command in ("inspect", "validate", "version"):
+    for command in ("inspect", "validate", "version", "preview"):
         assert command in result.output
 
 
 def test_help_does_not_advertise_unimplemented_commands(runner: CliRunner) -> None:
     result = runner.invoke(app, ["--help"])
 
-    for planned in ("orthorectify", "calculate-index", "process", "preview"):
+    for planned in ("orthorectify", "calculate-index", "process", "spectral-profile"):
         assert planned not in result.output
 
 
@@ -278,3 +278,50 @@ def test_error_message_and_hint_are_printed_to_stderr(
     stderr = capsys.readouterr().err
     assert "error:" in stderr
     assert "Hint:" in stderr
+
+
+def test_preview_writes_a_png(runner: CliRunner, sample_raster: Path, tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "preview",
+            "--input",
+            str(sample_raster),
+            "--output-dir",
+            str(tmp_path),
+            "--composite",
+            "true-color",
+            "--max-dimension",
+            "32",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "scene_preview_true_color.png").is_file()
+    assert "wrote" in result.stdout
+
+
+def test_preview_json_reports_the_output_path(
+    runner: CliRunner, sample_raster: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "preview",
+            "--input",
+            str(sample_raster),
+            "--output-dir",
+            str(tmp_path),
+            "--band",
+            "2",
+            "--composite",
+            "band",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["composite"] == "band"
+    assert payload["band_indices"] == [2]
+    assert Path(payload["path"]).is_file()

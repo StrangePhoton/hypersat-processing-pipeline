@@ -220,3 +220,16 @@ def test_the_budget_applies_per_block_while_iterating(tiled_raster: Path) -> Non
 def test_block_iteration_validates_the_band(tiled_raster: Path) -> None:
     with pytest.raises(RasterReadError):
         list(iter_block_windows(tiled_raster, band=99))
+
+
+def test_out_shape_resamples_while_reading(sample_raster: Path) -> None:
+    chunk = read_chunk(
+        sample_raster,
+        bands=[1],
+        options=ReadOptions(out_shape=(3, 4), masked=False),
+    )
+
+    assert chunk.data.shape == (1, 3, 4)
+    assert chunk.window.shape == (3, 4)
+    assert chunk.source_width == 8
+    assert chunk.source_height == 6
