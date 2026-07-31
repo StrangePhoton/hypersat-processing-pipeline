@@ -76,3 +76,35 @@ def product_directory(tmp_path: Path) -> Path:
 def dem_raster(tmp_path: Path) -> Path:
     """A small georeferenced synthetic elevation raster."""
     return write_dem(tmp_path / "dem.tif")
+
+
+@pytest.fixture
+def masked_raster(tmp_path: Path) -> Path:
+    """A raster that actually contains the NoData value its metadata declares."""
+    return write_geotiff(
+        tmp_path / "with_nodata.tif",
+        width=6,
+        height=4,
+        count=2,
+        nodata=0.0,
+        nodata_pixels=[(0, 0), (2, 3)],
+        wavelengths_nm=[560.0, 665.0],
+    )
+
+
+@pytest.fixture
+def tiled_raster(tmp_path: Path) -> Path:
+    """A tiled, compressed raster whose block grid does not divide its size evenly.
+
+    40 pixels across a 16-pixel tile grid gives three columns of tiles, the last one
+    partial, which is what exercises block iteration properly.
+    """
+    return write_geotiff(
+        tmp_path / "tiled.tif",
+        width=40,
+        height=40,
+        count=2,
+        tiled=True,
+        compress="deflate",
+        wavelengths_nm=[550.0, 660.0],
+    )

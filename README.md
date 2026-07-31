@@ -26,7 +26,9 @@ reflects what actually runs today — planned features are marked as such, not a
 | Version / environment info | `hypersat version` | Working |
 | Product and raster inspection | `hypersat inspect` | Working |
 | Pre-flight validation (product, DEM, output path) | `hypersat validate` | Working |
-| Windowed / band-selective raster reading | library API | Planned (milestone 3) |
+| Windowed / band-selective raster reading | library API | Working |
+| Atomic tiled/compressed GeoTIFF writing | library API | Working |
+| Wavelength-based band selection | library API | Working |
 | Percentile-stretched previews | `hypersat preview` | Planned (milestone 4) |
 | NDVI / NDWI, spectral profiles, band statistics | `hypersat calculate-index`, `hypersat spectral-profile` | Planned (milestone 5) |
 | Quality mask | `hypersat process` stage | Planned (milestone 6) |
@@ -226,6 +228,42 @@ The CLI is meant to be scripted, so exit codes are a tested contract:
 | 8 | Missing optional dependency |
 | 9 | Requested functionality not implemented yet |
 
+### Library API
+
+Reading, band selection and writing are available as a library before they get their own
+commands (the preview and index commands arrive in milestones 4 and 5):
+
+```python
+from pathlib import Path
+
+from hypersat.analytics.bands import true_colour_bands
+from hypersat.io.inspect import inspect_raster
+from hypersat.io.reader import ReadOptions, read_chunk
+from hypersat.io.writer import write_chunk
+from hypersat.models.raster import ReadWindow
+
+scene = Path("data/samples/scene.tif")
+info = inspect_raster(scene)
+
+# Bands are chosen by wavelength, not by an index tied to one sensor's layout.
+red, green, blue = true_colour_bands([band.wavelength_nm for band in info.bands])
+
+chunk = read_chunk(
+    scene,
+    window=ReadWindow(col_off=0, row_off=0, width=512, height=512),
+    bands=[red.index, green.index, blue.index],
+    options=ReadOptions(as_float32=True),
+)
+
+# CRS, transform, NoData, descriptions and wavelengths travel with the pixels. The RPC
+# sensor model does not, because this chunk is a subset of the source grid.
+write_chunk(Path("outputs/subset.tif"), chunk)
+```
+
+Omitting `window` reads the whole raster, which on a real hyperspectral product raises
+`MemoryBudgetExceededError` rather than allocating gigabytes; `iter_chunks` walks the
+file's own block grid instead.
+
 ## Data acquisition
 
 No data is committed, and the pipeline never downloads anything by itself.
@@ -360,12 +398,16 @@ Summarised — the full list is in [docs/limitations.md](docs/limitations.md):
 * **`pathlib` throughout**, enforced by Ruff's `PTH` rules; no hardcoded local paths and
   no hardcoded EPSG codes outside examples and tests.
 * **Wavelengths are read from metadata, with the source recorded per band**, so band
-  selection can be driven by wavelength rather than by an index tied to one sensor's layout.
-  The selection functions themselves arrive in milestone 3.
-* **Atomic writes** are the intended contract for every raster output — write to a
-  temporary sibling, move into place only after the dataset closes cleanly — so a crash
-  cannot leave a plausible-looking partial product. Implemented with the writer in
-  milestone 3; nothing writes rasters yet.
+  selection is driven by wavelength rather than by an index tied to one sensor's layout.
+  `hypersat.analytics.bands` resolves a wavelength to the nearest band within a tolerance,
+  breaks ties towards the lower index, and reports the distance so a poor-but-legal match
+  can be surfaced instead of hidden.
+* **Atomic writes** for every raster output — write to a temporary sibling, move into
+  place with `Path.replace` only after the dataset closes cleanly — so a crash cannot
+  leave a plausible-looking partial product.
+* **Reads are budgeted.** A full hyperspectral cube does not fit in a comfortable amount
+  of memory, so the reader states the cost of a read before allocating and refuses one
+  that exceeds the budget, pointing at windowed or band-selective reading instead.
 * **Strict quality gates:** `ruff` (including pydocstyle and flake8-annotations), `mypy
   --strict` over `src` *and* `tests`, `pytest` on Python 3.11-3.13, and a Docker build, all
   in CI.

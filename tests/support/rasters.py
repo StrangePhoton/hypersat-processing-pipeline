@@ -69,6 +69,7 @@ def write_geotiff(
     tiled: bool = False,
     compress: str | None = None,
     fill_value: float | None = None,
+    nodata_pixels: Sequence[tuple[int, int]] | None = None,
 ) -> Path:
     """Write a small synthetic GeoTIFF and return its path.
 
@@ -91,6 +92,8 @@ def write_geotiff(
         tiled: Whether to write tiled rather than striped data.
         compress: GDAL compression name, e.g. ``"deflate"``.
         fill_value: Constant to fill every band with; defaults to a per-band ramp.
+        nodata_pixels: ``(row, column)`` positions set to ``nodata`` in every band, so a
+            raster actually contains the value its metadata declares.
 
     Returns:
         The path written.
@@ -133,6 +136,9 @@ def write_geotiff(
                     values = ramp + band_index
                 else:
                     values = np.full((height, width), fill_value, dtype=dtype)
+                if nodata_pixels and nodata is not None:
+                    for row, column in nodata_pixels:
+                        values[row, column] = nodata
                 dataset.write(values, band_index)
                 if band_descriptions is not None:
                     dataset.set_band_description(band_index, band_descriptions[band_index - 1])

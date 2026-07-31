@@ -68,17 +68,18 @@ by anything; they import nothing from the package.
 | `hypersat.models.product` | `RasterInfo`, `BandInfo`, `RPCInfo`, `CRSInfo`, `FileInfo`, `ProductLayout`, `InspectionResult` | 2 (done) |
 | `hypersat.models.environment` | `EnvironmentInfo`, `ProjDataStatus` | 2 (done) |
 | `hypersat.models.validation` | `ValidationCheck`, `ValidationReport` | 2 (done) |
+| `hypersat.models.raster` | `ReadWindow`, `RasterChunk`, `RasterMetadata` (dataclasses, not Pydantic: they carry arrays) | 3 (done) |
 | `hypersat.models.report` | `QualityControlReport`, `StageReport`, `BandStatistics` | 10 |
 | `hypersat.io.inspect` | Read-only raster/product introspection, product-directory scan | 2 (done) |
 | `hypersat.io.files` | Sizes, timestamps, SHA-256 checksums | 2 (done) |
 | `hypersat.io.environment` | Version reporting, PROJ database probe and fallback | 2 (done) |
-| `hypersat.io.reader` | Windowed, band-selective, masked reading | 3 |
-| `hypersat.io.writer` | Atomic tiled/compressed GeoTIFF writing | 3 |
+| `hypersat.io.reader` | Windowed, band-selective, masked reading with a memory budget | 3 (done) |
+| `hypersat.io.writer` | Atomic tiled/compressed GeoTIFF writing, metadata propagation | 3 (done) |
 | `hypersat.processing.validation` | Pre-flight product/DEM/output checks | 2 (done) |
 | `hypersat.processing.quality_mask` | Quality-class raster, OpenCV morphology | 6 |
 | `hypersat.processing.reprojection` | CRS transform, alignment, resampling choice | 7 |
 | `hypersat.processing.orthorectification` | RPC + DEM warp | 8 |
-| `hypersat.analytics.bands` | Wavelength-to-index selection | 3 |
+| `hypersat.analytics.bands` | Wavelength-to-index selection | 3 (done) |
 | `hypersat.analytics.indices` | NDVI, NDWI with safe division | 5 |
 | `hypersat.analytics.profiles` | Pixel spectral profiles | 5 |
 | `hypersat.analytics.statistics` | Per-band descriptive statistics | 5 |

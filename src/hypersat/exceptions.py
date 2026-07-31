@@ -40,6 +40,7 @@ __all__ = [
     "GDALBindingsUnavailableError",
     "HyperSatError",
     "InvalidWavelengthMetadataError",
+    "MemoryBudgetExceededError",
     "MissingDEMError",
     "MissingGeoreferencingError",
     "MissingRPCMetadataError",
@@ -169,6 +170,15 @@ class RasterReadError(RasterIOError):
 
 class RasterWriteError(RasterIOError):
     """A raster product could not be written to its destination."""
+
+
+class MemoryBudgetExceededError(RasterIOError):
+    """A read was refused because the resulting array would exceed the memory budget.
+
+    Raised *before* any allocation. A full hyperspectral cube is large enough that an
+    accidental whole-file read can exhaust memory, so the reader states the cost up front
+    and points the caller at windowed or band-selective reading instead.
+    """
 
 
 class ProcessingError(HyperSatError):
