@@ -27,12 +27,13 @@ reflects what actually runs today — planned features are marked as such, not a
 | Product and raster inspection | `hypersat inspect` | Working |
 | Pre-flight validation (product, DEM, output path) | `hypersat validate` | Working |
 | Windowed / band-selective raster reading | library API | Planned (milestone 3) |
-| Reprojection and grid alignment | library API | Planned (milestone 4) |
-| RPC + DEM orthorectification | `hypersat orthorectify` | Planned (milestone 4) |
-| Quality mask | `hypersat process` stage | Planned (milestone 5) |
-| Percentile-stretched previews | `hypersat preview` | Planned (milestone 5) |
-| NDVI / NDWI, spectral profiles, band statistics | `hypersat calculate-index`, `hypersat spectral-profile` | Planned (milestone 6) |
-| YAML-driven pipeline and JSON QC report | `hypersat process` | Planned (milestone 7) |
+| Percentile-stretched previews | `hypersat preview` | Planned (milestone 4) |
+| NDVI / NDWI, spectral profiles, band statistics | `hypersat calculate-index`, `hypersat spectral-profile` | Planned (milestone 5) |
+| Quality mask | `hypersat process` stage | Planned (milestone 6) |
+| Reprojection and grid alignment | library API | Planned (milestone 7) |
+| RPC + DEM orthorectification | `hypersat orthorectify` | Planned (milestone 8) |
+| YAML-driven pipeline | `hypersat process` | Planned (milestone 9) |
+| JSON QC report | `hypersat process` | Planned (milestone 10) |
 
 Unimplemented functionality never silently succeeds, and planned commands are absent from
 the CLI rather than present and doing nothing. Exit code 9 (`NotImplementedYetError`) is
@@ -50,7 +51,7 @@ Every other planned command is absent from `--help` until it does something real
                                         |
                         +---------------v---------------+
                         |       hypersat.pipeline       |  stage protocol, runner,
-                        |  order, timing, QC report     |  artifacts   (milestone 7)
+                        |  order, timing, QC report     |  artifacts   (milestone 9)
                         +----+--------------+-----------+
                              |              |
           +------------------v---+     +----v-----------------------+
@@ -242,7 +243,7 @@ Full instructions, alternatives and the vertical-datum caveat:
 ## Example outputs
 
 Nothing here yet. Example imagery, previews and a real `qc_report.json` will be added in
-milestone 8, generated from a real EnMAP scene and labelled with the exact processing that
+milestone 10, generated from a real EnMAP scene and labelled with the exact processing that
 produced them. This section stays empty rather than showing synthetic data that could be
 mistaken for a real satellite-processing result.
 
@@ -274,7 +275,7 @@ RPC metadata raises `MissingRPCMetadataError`; a missing or unreadable DEM raise
 ## Quality-mask classes
 
 Single-band `uint8`, one class per pixel, built in sensor geometry
-([docs/quality-masks.md](docs/quality-masks.md), implementation in milestone 5):
+([docs/quality-masks.md](docs/quality-masks.md), implementation in milestone 6):
 
 | Code | Name | Meaning |
 | --- | --- | --- |
@@ -298,7 +299,7 @@ physics or a validated classifier, not ad-hoc radiance thresholds.
 
 `configs/pipeline.example.yaml` is the annotated reference for the schema the pipeline is
 growing into. Today's commands are driven by CLI options rather than by that file: YAML
-loading and the `hypersat process` runner arrive in milestone 7, and only the parts of the
+loading and the `hypersat process` runner arrive in milestone 9, and only the parts of the
 schema a working stage actually reads exist as models so far.
 
 What is already true is the modelling style. Every configuration model is a frozen Pydantic
@@ -376,7 +377,7 @@ Summarised — the full list is in [docs/limitations.md](docs/limitations.md):
 ## Roadmap
 
 See [docs/roadmap.md](docs/roadmap.md) for the milestone plan and the open decisions
-(notably the warp backend choice for milestone 4).
+(notably the warp backend choice for milestone 8).
 
 ## License
 

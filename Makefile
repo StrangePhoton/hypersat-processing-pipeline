@@ -44,7 +44,7 @@ test-external: ## Run tests that need real satellite products or DEMs (opt-in)
 
 check: lint type-check test ## Run every quality gate, in the order CI uses
 
-# Becomes functional in milestone 7, when `hypersat process` is implemented.
+# Becomes functional in milestone 9, when `hypersat process` is implemented.
 run-example: ## Run the example pipeline configuration
 	$(PYTHON) -m hypersat.cli process --config configs/pipeline.example.yaml
 

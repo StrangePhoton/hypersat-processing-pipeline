@@ -5,7 +5,7 @@
 # pipeline is growing into.
 #
 # NOT YET LOADED. Reading this file and running stages from it is `hypersat
-# process`, which arrives in milestone 7. Today's commands (`inspect`, `validate`)
+# process`, which arrives in milestone 9. Today's commands (`inspect`, `validate`)
 # are driven by CLI options, and only the keys a working stage actually reads
 # exist as Pydantic models - a model without code behind it would be a promise,
 # not a feature. Implemented so far, in `hypersat.models.config`:

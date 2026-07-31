@@ -68,25 +68,25 @@ by anything; they import nothing from the package.
 | `hypersat.models.product` | `RasterInfo`, `BandInfo`, `RPCInfo`, `CRSInfo`, `FileInfo`, `ProductLayout`, `InspectionResult` | 2 (done) |
 | `hypersat.models.environment` | `EnvironmentInfo`, `ProjDataStatus` | 2 (done) |
 | `hypersat.models.validation` | `ValidationCheck`, `ValidationReport` | 2 (done) |
-| `hypersat.models.report` | `QualityControlReport`, `StageReport`, `BandStatistics` | 7 |
+| `hypersat.models.report` | `QualityControlReport`, `StageReport`, `BandStatistics` | 10 |
 | `hypersat.io.inspect` | Read-only raster/product introspection, product-directory scan | 2 (done) |
 | `hypersat.io.files` | Sizes, timestamps, SHA-256 checksums | 2 (done) |
 | `hypersat.io.environment` | Version reporting, PROJ database probe and fallback | 2 (done) |
 | `hypersat.io.reader` | Windowed, band-selective, masked reading | 3 |
 | `hypersat.io.writer` | Atomic tiled/compressed GeoTIFF writing | 3 |
 | `hypersat.processing.validation` | Pre-flight product/DEM/output checks | 2 (done) |
-| `hypersat.processing.quality_mask` | Quality-class raster | 5 |
-| `hypersat.processing.orthorectification` | RPC + DEM warp | 4 |
-| `hypersat.processing.reprojection` | CRS transform, alignment, resampling choice | 4 |
+| `hypersat.processing.quality_mask` | Quality-class raster, OpenCV morphology | 6 |
+| `hypersat.processing.reprojection` | CRS transform, alignment, resampling choice | 7 |
+| `hypersat.processing.orthorectification` | RPC + DEM warp | 8 |
 | `hypersat.analytics.bands` | Wavelength-to-index selection | 3 |
-| `hypersat.analytics.indices` | NDVI, NDWI with safe division | 6 |
-| `hypersat.analytics.profiles` | Pixel spectral profiles | 6 |
-| `hypersat.analytics.statistics` | Per-band descriptive statistics | 6 |
-| `hypersat.visualization.stretch` | Percentile stretching | 5 |
-| `hypersat.visualization.preview` | RGB / false-colour / single-band PNG | 5 |
-| `hypersat.pipeline.stage` | `Stage` protocol, `StageContext`, `StageResult` | 7 |
-| `hypersat.pipeline.runner` | Sequential executor, timing, failure isolation | 7 |
-| `hypersat.pipeline.registry` | Config key to stage mapping | 7 |
+| `hypersat.analytics.indices` | NDVI, NDWI with safe division | 5 |
+| `hypersat.analytics.profiles` | Pixel spectral profiles | 5 |
+| `hypersat.analytics.statistics` | Per-band descriptive statistics | 5 |
+| `hypersat.visualization.stretch` | Percentile stretching | 4 |
+| `hypersat.visualization.preview` | RGB / false-colour / single-band PNG | 4 |
+| `hypersat.pipeline.stage` | `Stage` protocol, `StageContext`, `StageResult` | 9 |
+| `hypersat.pipeline.runner` | Sequential executor, timing, failure isolation | 9 |
+| `hypersat.pipeline.registry` | Config key to stage mapping | 9 |
 
 A planned `hypersat.io.product` module was dropped in milestone 2: locating the imagery
 inside a product directory turned out to be ~40 lines of path scanning that belongs next to

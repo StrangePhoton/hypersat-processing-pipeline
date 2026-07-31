@@ -2,7 +2,7 @@
 
 The quality mask is a single-band `uint8` GeoTIFF built in **sensor geometry**, before
 orthorectification (rationale in `docs/architecture.md`). Implementation lands in
-milestone 5; this document fixes the contract now so that reports, tests and downstream
+milestone 6; this document fixes the contract now so that reports, tests and downstream
 code can rely on it.
 
 ## 1. Class codes

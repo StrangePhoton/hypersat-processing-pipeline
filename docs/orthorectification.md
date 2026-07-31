@@ -103,7 +103,7 @@ delivered model.
 
 ## 3. How this project implements it
 
-The orthorectification stage (milestone 4) will:
+The orthorectification stage (milestone 8) will:
 
 1. **Verify the sensor model exists.** If the raster has no RPC metadata, raise
    `MissingRPCMetadataError`. It never falls back to plain reprojection.
@@ -140,7 +140,7 @@ warping kernel):
 
 The repository currently treats `osgeo.gdal` as an optional extra (`pip install -e
 ".[gdal]"`) and rasterio as the guaranteed dependency. The backend choice is recorded in
-`docs/roadmap.md` as a decision to confirm before milestone 4, and whichever is chosen,
+`docs/roadmap.md` as a decision to confirm before milestone 8, and whichever is chosen,
 the transformer options used are echoed into the QC report.
 
 ## 4. What this stage does not do
