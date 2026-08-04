@@ -28,6 +28,18 @@ __all__ = [
     "write_geotiff",
 ]
 
+
+def _rpc_coeff_string(term_index: int | None = None) -> str:
+    """Build a 20-term RPC coefficient string.
+
+    When ``term_index`` is set, that term is ``1.0`` and the rest are zero. When ``None``,
+    the constant term is ``1.0`` (a unit denominator).
+    """
+    coefficients = [0.0] * 20
+    coefficients[0 if term_index is None else term_index] = 1.0
+    return " ".join(str(value) for value in coefficients)
+
+
 SYNTHETIC_RPC_TAGS: dict[str, str] = {
     "LINE_OFF": "3.0",
     "SAMP_OFF": "4.0",
@@ -39,15 +51,19 @@ SYNTHETIC_RPC_TAGS: dict[str, str] = {
     "LAT_SCALE": "0.05",
     "LONG_SCALE": "0.05",
     "HEIGHT_SCALE": "500.0",
-    "LINE_NUM_COEFF": " ".join(["1.0", *["0.0"] * 19]),
-    "LINE_DEN_COEFF": " ".join(["1.0", *["0.0"] * 19]),
-    "SAMP_NUM_COEFF": " ".join(["1.0", *["0.0"] * 19]),
-    "SAMP_DEN_COEFF": " ".join(["1.0", *["0.0"] * 19]),
+    # Invertible toy model: normalised row = lat_n, normalised column = lon_n.
+    # Coefficient order is RPC00B (constant, L, P, H, ...). Enough for software tests of
+    # warping; not a real sensor model and not suitable for accuracy claims.
+    "LINE_NUM_COEFF": _rpc_coeff_string(2),
+    "LINE_DEN_COEFF": _rpc_coeff_string(),
+    "SAMP_NUM_COEFF": _rpc_coeff_string(1),
+    "SAMP_DEN_COEFF": _rpc_coeff_string(),
 }
 """A structurally complete but scientifically meaningless RPC model.
 
 It is sufficient to test *software* behaviour - detection, completeness checks, error
-paths - and is explicitly not sufficient to validate geometric accuracy.
+paths and that the warp machinery runs - and is explicitly not sufficient to validate
+geometric accuracy.
 """
 
 

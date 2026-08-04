@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from rasterio.transform import from_origin
 from typer.testing import CliRunner
 
 from hypersat import __version__
@@ -48,6 +49,7 @@ def test_help_lists_the_implemented_commands(runner: CliRunner) -> None:
         "spectral-profile",
         "quality-mask",
         "reproject",
+        "orthorectify",
     ):
         assert command in result.output
 
@@ -55,7 +57,7 @@ def test_help_lists_the_implemented_commands(runner: CliRunner) -> None:
 def test_help_does_not_advertise_unimplemented_commands(runner: CliRunner) -> None:
     result = runner.invoke(app, ["--help"])
 
-    for planned in ("orthorectify", "process", "band-statistics"):
+    for planned in ("process", "band-statistics"):
         assert planned not in result.output
 
 
@@ -383,6 +385,47 @@ def test_spectral_profile_cli_writes_csv_and_json(
     assert payload["col"] == 2
     assert Path(payload["csv_path"]).is_file()
     assert Path(payload["json_path"]).is_file()
+
+
+def test_orthorectify_cli_writes_geotiff(
+    runner: CliRunner, sensor_geometry_raster: Path, tmp_path: Path
+) -> None:
+    dem = write_geotiff(
+        tmp_path / "dem.tif",
+        width=40,
+        height=40,
+        count=1,
+        dtype="float32",
+        crs="EPSG:4326",
+        transform=from_origin(9.9, 45.1, 0.005, 0.005),
+        nodata=-32768.0,
+        fill_value=300.0,
+    )
+    result = runner.invoke(
+        app,
+        [
+            "orthorectify",
+            "--input",
+            str(sensor_geometry_raster),
+            "--dem",
+            str(dem),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--target-crs",
+            "EPSG:32632",
+            "--resolution",
+            "90",
+            "--bands",
+            "1",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert Path(payload["path"]).is_file()
+    assert payload["crs"] == "EPSG:32632"
+    assert "RPC_DEM" in payload["transformer_options"]
 
 
 def test_reproject_cli_writes_geotiff(

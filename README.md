@@ -35,7 +35,7 @@ reflects what actually runs today — planned features are marked as such, not a
 | Per-band / index descriptive statistics | library API (+ `--statistics` on calculate-index) | Working |
 | Quality mask | `hypersat quality-mask` | Working |
 | Reprojection and grid alignment | `hypersat reproject` | Working |
-| RPC + DEM orthorectification | `hypersat orthorectify` | Planned (milestone 8) |
+| RPC + DEM orthorectification | `hypersat orthorectify` | Working |
 | YAML-driven pipeline | `hypersat process` | Planned (milestone 9) |
 | JSON QC report | `hypersat process` | Planned (milestone 10) |
 
@@ -240,6 +240,12 @@ hypersat reproject --input data/samples/scene.tif --output-dir outputs/reproject
 hypersat reproject --input data/samples/scene.tif --output-dir outputs/reproject \
                    --reference-raster data/samples/reference_grid.tif \
                    --data-semantics categorical --resampling nearest
+
+# RPC + DEM orthorectification (sensor geometry -> map grid). DEM is mandatory.
+hypersat orthorectify --input data/raw/enmap_l1b_product --dem data/dem/dem_cop30.tif \
+                      --output-dir outputs/ortho --target-crs auto --resolution 30
+hypersat orthorectify --input data/raw/qmask.tif --dem data/dem/dem_cop30.tif \
+                      --output-dir outputs/ortho --data-semantics categorical
 ```
 
 `--json` writes to stdout while logs and diagnostics go to stderr, so a `--json` run can be

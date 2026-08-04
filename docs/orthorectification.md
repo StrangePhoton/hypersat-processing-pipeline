@@ -103,45 +103,39 @@ delivered model.
 
 ## 3. How this project implements it
 
-The orthorectification stage (milestone 8) will:
+The orthorectification stage is implemented (`hypersat orthorectify` /
+`hypersat.processing.orthorectification`) and does the following:
 
 1. **Verify the sensor model exists.** If the raster has no RPC metadata, raise
    `MissingRPCMetadataError`. It never falls back to plain reprojection.
 2. **Verify the DEM.** Missing path raises `MissingDEMError`; an unreadable DEM or one
    that does not cover the scene raises `UnreadableDEMError`. Running "orthorectification"
    with a DEM that does not overlap the scene silently degrades to a constant-height
-   warp, so the overlap check is part of validation, not an optional nicety.
+   warp, so the overlap check is mandatory, not an optional nicety.
 3. **Choose the target CRS.** Either an explicit authority code, or `auto`, which picks
    the UTM zone containing the scene centre (and refuses when the scene straddles zones
    too widely or lies beyond the UTM latitude limits, where a polar stereographic CRS
    would be appropriate instead).
-4. **Warp with GDAL** using the RPC transformer with the DEM supplied via the
-   `RPC_DEM` transformer option, the configured output resolution and resampling.
+4. **Warp with GDAL via rasterio** using the RPC transformer with the DEM supplied via
+   the `RPC_DEM` transformer option, the configured output resolution and resampling.
 5. **Resample by data semantics.** Continuous imagery uses `bilinear` or `cubic`;
    categorical rasters (the quality mask) always use `nearest`, because averaging class
    codes produces meaningless intermediate values.
 6. **Preserve NoData** explicitly on both the source and destination side, so that areas
    outside the swath are NoData rather than zero-valued "real" data.
 7. **Write tiled, compressed GeoTIFF** output, written atomically.
-8. **Log and report the exact configuration** — transformer options, resampling kernel,
-   DEM path, target CRS, output grid — into the QC report, so a reviewer can tell what
-   was actually done.
+8. **Record the exact configuration** — transformer options, resampling kernel, DEM path,
+   target CRS, output grid — in the output GeoTIFF tags (and later the QC report), so a
+   reviewer can tell what was actually done.
 
-### Open implementation decision: which GDAL API
+### Backend: rasterio over `osgeo.gdal.Warp`
 
-Both candidate backends call the same GDAL C++ code (`GDALCreateRPCTransformer` plus the
-warping kernel):
-
-* **`osgeo.gdal.Warp`** — the canonical API, but PyPI ships only an sdist for `gdal`, so
-  it requires a matching system libgdal (conda-forge, distro packages, or an
-  `osgeo/gdal` image). It is not installable with plain `pip` on Windows.
-* **`rasterio.warp.reproject(..., rpcs=..., RPC_DEM=...)`** — rasterio wheels bundle
-  libgdal, so it installs with `pip` on Linux, macOS and Windows alike.
-
-The repository currently treats `osgeo.gdal` as an optional extra (`pip install -e
-".[gdal]"`) and rasterio as the guaranteed dependency. The backend choice is recorded in
-`docs/roadmap.md` as a decision to confirm before milestone 8, and whichever is chosen,
-the transformer options used are echoed into the QC report.
+Both APIs call the same GDAL C++ code (`GDALCreateRPCTransformer` plus the warping
+kernel). This project uses **`rasterio.warp.reproject(..., rpcs=..., RPC_DEM=...)`**
+because rasterio wheels bundle libgdal and install with `pip` on Linux, macOS and
+Windows. `osgeo.gdal` remains an optional extra (`pip install -e ".[gdal]"`) for
+environments that already ship a matching system libgdal. Transformer options passed to
+GDAL are echoed into the output tags.
 
 ## 4. What this stage does not do
 

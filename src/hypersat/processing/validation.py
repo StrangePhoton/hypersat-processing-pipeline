@@ -154,10 +154,9 @@ def validate_dem(dem_path: Path) -> RasterInfo:
     """Validate that a DEM exists, opens, and carries the georeferencing warping needs.
 
     A DEM is only usable for orthorectification if its heights can be located on the
-    ground, which requires both a CRS and an affine transform. Whether it actually covers
-    the scene footprint cannot be checked here: for a product in sensor geometry the
-    footprint follows from evaluating the RPC model, which belongs to the
-    orthorectification milestone.
+    ground, which requires both a CRS and an affine transform. Scene-footprint overlap is
+    checked in :mod:`hypersat.processing.orthorectification` once the RPC normalisation
+    domain is known.
 
     Args:
         dem_path: Path to the elevation model.

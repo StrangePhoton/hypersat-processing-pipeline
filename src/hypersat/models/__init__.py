@@ -7,8 +7,8 @@ Modules:
 
 * ``base`` - ``StrictModel``, the shared Pydantic configuration (implemented).
 * ``config`` - per-command option models including ``PreviewRequest``, ``IndexRequest``,
-  ``SpectralProfileRequest``, ``QualityMaskRequest`` and ``ReprojectRequest``
-  (implemented, grows per milestone).
+  ``SpectralProfileRequest``, ``QualityMaskRequest``, ``ReprojectRequest`` and
+  ``OrthorectifyRequest`` (implemented, grows per milestone).
 * ``product`` - ``RasterInfo``, ``BandInfo``, ``RPCInfo`` inspection results (implemented).
 * ``environment`` - runtime and PROJ-database description (implemented).
 * ``validation`` - validation checks and reports (implemented).

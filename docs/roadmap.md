@@ -12,7 +12,7 @@ the next one starts. Status is kept honest: the README's capability table mirror
 | 5 | Spectral analytics | NDVI and NDWI with safe division and NoData propagation, pixel spectral profiles, per-band descriptive statistics; `hypersat calculate-index`, `hypersat spectral-profile` | Done |
 | 6 | Quality mask | Class raster per `docs/quality-masks.md`, configurable OpenCV morphology, built in sensor geometry; `hypersat quality-mask` | Done |
 | 7 | Reprojection and raster alignment | CRS reprojection, output-transform calculation, resolution control, alignment to a reference grid, bounds validation, resampling choice by data semantics, automatic UTM selection; `hypersat reproject` | Done |
-| 8 | RPC + DEM orthorectification | RPC sensor model plus DEM warp through GDAL, explicit failure when the sensor model or the DEM is unusable, logged transformer configuration; `hypersat orthorectify` | Planned |
+| 8 | RPC + DEM orthorectification | RPC sensor model plus DEM warp through GDAL (via rasterio), explicit failure when the sensor model or the DEM is unusable, DEM overlap check, logged transformer configuration; `hypersat orthorectify` | Done |
 | 9 | Pipeline orchestration and YAML config | `Stage` protocol, sequential runner with timing and failure isolation, YAML-driven `hypersat process` | Planned |
 | 10 | QC report and showcase | JSON quality-control report with per-stage timings and output checksums, end-to-end integration test, README example outputs from a real EnMAP scene, `external`-marked real-product test | Planned |
 
@@ -25,16 +25,11 @@ hardcoding EnMAP band indices, which this project explicitly avoids.
 
 ## Decisions to confirm before the milestones that need them
 
-1. **Warp backend (needed by milestone 8).** `osgeo.gdal.Warp` is the canonical API but
-   installs only from source on PyPI, so it cannot be `pip install`ed on Windows;
-   `rasterio.warp.reproject(..., rpcs=..., RPC_DEM=...)` reaches the same GDAL code
-   through wheels that work everywhere. Current default: rasterio as the required path,
-   `osgeo.gdal` as an optional extra. Verified against the installed rasterio 1.5.0
-   (GDAL 3.12.1): `rasterio.rpc.RPC` exposes the full coefficient set with
-   `from_gdal()`/`to_gdal()`, and `rasterio.warp.reproject` accepts `rpcs=` plus a
-   `**kwargs` passthrough for GDAL transformer options such as `RPC_DEM`. Since that is a
-   binding over the same `GDALCreateRPCTransformer`/`GDALWarp` code, it is real
-   orthorectification and not a substitute, so the default stands.
+1. ~~**Warp backend (needed by milestone 8).**~~ **Resolved in milestone 8.** The
+   implementation uses `rasterio.warp.reproject(..., rpcs=..., RPC_DEM=...)`, which
+   reaches the same GDAL `GDALCreateRPCTransformer` / warp code as `osgeo.gdal.Warp`
+   through wheels that install on Windows. `osgeo.gdal` remains an optional extra for
+   environments that already have a system libgdal.
 2. **Real product for the showcase (needed by milestone 10).** Which EnMAP scene and DEM
    tile will be used for the README's example outputs.
 3. ~~**Stale PROJ data path on developer machines.**~~ **Resolved in milestone 2.** A

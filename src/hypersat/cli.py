@@ -30,18 +30,21 @@ from hypersat.models.config import (
     MorphologyConfig,
     MorphologyKernelShape,
     MorphologyOperation,
+    OrthorectifyRequest,
     OutputConfig,
     PreviewComposite,
     PreviewRequest,
     QualityMaskRequest,
     ReprojectRequest,
     ResamplingMethod,
+    RpcTransformerOptions,
     SpectralIndexName,
     SpectralProfileRequest,
     StretchConfig,
     ValidationRequest,
     ValidationRequirements,
 )
+from hypersat.processing.orthorectification import orthorectify_raster
 from hypersat.processing.quality_mask import build_quality_mask
 from hypersat.processing.reprojection import reproject_raster
 from hypersat.processing.spectral import calculate_index, extract_spectral_profile
@@ -946,6 +949,162 @@ def reproject_command(
         f"wrote {result.path} "
         f"({result.crs_authority}, {result.resolution:g} units/px, "
         f"{result.width}x{result.height}, {result.resampling.value})"
+    )
+
+
+@app.command("orthorectify")
+def orthorectify_command(
+    input_path: InputOption,
+    dem_path: Annotated[
+        Path,
+        typer.Option(
+            "--dem",
+            help="Digital elevation model covering the scene (required).",
+            show_default=False,
+        ),
+    ],
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory that receives the orthorectified GeoTIFF.",
+            show_default=False,
+        ),
+    ],
+    target_crs: Annotated[
+        str,
+        typer.Option(
+            "--target-crs",
+            help="Destination CRS: 'auto' (UTM of scene centre) or an authority code "
+            "such as EPSG:32633.",
+        ),
+    ] = "auto",
+    resolution: Annotated[
+        float,
+        typer.Option(
+            "--resolution",
+            help="Output ground sample distance in target-CRS units (metres for UTM).",
+        ),
+    ] = 30.0,
+    resampling: Annotated[
+        ResamplingMethod,
+        typer.Option("--resampling", help="nearest | bilinear | cubic."),
+    ] = ResamplingMethod.BILINEAR,
+    data_semantics: Annotated[
+        DataSemantics,
+        typer.Option(
+            "--data-semantics",
+            help="continuous (default) or categorical. Categorical forces nearest.",
+        ),
+    ] = DataSemantics.CONTINUOUS,
+    snap_to_grid: Annotated[
+        bool,
+        typer.Option(
+            "--snap-to-grid/--no-snap-to-grid",
+            help="Snap the output origin to a whole multiple of the resolution.",
+        ),
+    ] = True,
+    bands: BandsOption = None,
+    nodata: Annotated[
+        float | None,
+        typer.Option(
+            "--nodata",
+            help="Destination NoData; omit to reuse the source NoData when defined.",
+            show_default=False,
+        ),
+    ] = None,
+    rpc_dem_missing_value: Annotated[
+        float | None,
+        typer.Option(
+            "--rpc-dem-missing-value",
+            help="Elevation used where the DEM has NoData (GDAL RPC_DEM_MISSING_VALUE).",
+            show_default=False,
+        ),
+    ] = None,
+    rpc_height_scale: Annotated[
+        float | None,
+        typer.Option(
+            "--rpc-height-scale",
+            help="Optional RPC_HEIGHT_SCALE in metres.",
+            show_default=False,
+        ),
+    ] = None,
+    rpc_dem_apply_vdatum_shift: Annotated[
+        bool,
+        typer.Option(
+            "--rpc-dem-apply-vdatum-shift/--no-rpc-dem-apply-vdatum-shift",
+            help="Forward RPC_DEM_APPLY_VDATUM_SHIFT to GDAL (default off).",
+        ),
+    ] = False,
+    warp_memory_mb: Annotated[
+        int,
+        typer.Option("--warp-memory-mb", min=1, help="GDAL warp memory limit in MiB."),
+    ] = 512,
+    product_id: Annotated[
+        str | None,
+        typer.Option(
+            "--product-id",
+            help="Filename token; derived from the input path when omitted.",
+            show_default=False,
+        ),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace an existing orthorectified GeoTIFF."),
+    ] = False,
+    as_json: JsonFlag = False,
+    proj_autofix: ProjAutofixOption = True,
+) -> None:
+    """Orthorectify sensor-geometry imagery with an RPC model and a DEM.
+
+    Both inputs are mandatory. Missing RPC metadata or a DEM that does not cover the
+    scene fails loudly — the command never falls back to plain reprojection. See
+    docs/orthorectification.md.
+    """
+    request = _build_model(
+        OrthorectifyRequest,
+        product_path=input_path,
+        dem_path=dem_path,
+        output=_build_model(OutputConfig, directory=output_dir, overwrite=overwrite),
+        target_crs=target_crs,
+        resolution=resolution,
+        resampling=resampling,
+        data_semantics=data_semantics,
+        snap_to_grid=snap_to_grid,
+        bands=_parse_band_indices(bands),
+        nodata=nodata,
+        rpc_options=_build_model(
+            RpcTransformerOptions,
+            rpc_height_scale=rpc_height_scale,
+            rpc_dem_missing_value=rpc_dem_missing_value,
+            rpc_dem_apply_vdatum_shift=rpc_dem_apply_vdatum_shift,
+        ),
+        warp_memory_mb=warp_memory_mb,
+        product_id=product_id,
+        proj_autofix=proj_autofix,
+    )
+    result = orthorectify_raster(request)
+    payload = {
+        "path": str(result.path),
+        "crs": result.crs_authority,
+        "resolution": result.resolution,
+        "width": result.width,
+        "height": result.height,
+        "band_indices": list(result.band_indices),
+        "resampling": result.resampling.value,
+        "dem_path": str(result.dem_path),
+        "transformer_options": dict(result.transformer_options),
+        "product_id": result.product_id,
+    }
+    if as_json:
+        typer.echo(json.dumps(payload, indent=2))
+        return
+    typer.echo(
+        f"wrote {result.path} "
+        f"({result.crs_authority}, {result.resolution:g} units/px, "
+        f"{result.width}x{result.height}, {result.resampling.value}, "
+        f"dem={result.dem_path.name})"
     )
 
 

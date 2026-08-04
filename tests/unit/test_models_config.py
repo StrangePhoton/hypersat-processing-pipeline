@@ -12,6 +12,7 @@ from hypersat.models.config import (
     DataSemantics,
     InputConfig,
     MorphologyConfig,
+    OrthorectifyRequest,
     OutputConfig,
     PreviewComposite,
     PreviewRequest,
@@ -193,3 +194,18 @@ def test_reproject_defaults() -> None:
     assert request.data_semantics is DataSemantics.CONTINUOUS
     assert request.snap_to_grid is True
     assert request.reference_raster is None
+
+
+def test_orthorectify_defaults_match_pipeline_example() -> None:
+    request = OrthorectifyRequest(
+        product_path=Path("scene.tif"),
+        dem_path=Path("dem.tif"),
+        output=OutputConfig(directory=Path("outputs")),
+    )
+
+    assert request.target_crs == "auto"
+    assert request.resolution == pytest.approx(30.0)
+    assert request.resampling is ResamplingMethod.BILINEAR
+    assert request.mask_resampling is ResamplingMethod.NEAREST
+    assert request.rpc_options.rpc_dem_apply_vdatum_shift is False
+    assert request.warp_memory_mb == 512

@@ -1,9 +1,9 @@
 """Configuration models.
 
 Only the configuration that the currently implemented commands actually consume lives
-here. Stage options for orthorectification and the YAML pipeline runner remain documented
-in ``configs/pipeline.example.yaml`` until those stages are implemented, so that no model
-exists without code that reads it.
+here. The YAML pipeline runner stage options remain documented in
+``configs/pipeline.example.yaml`` until milestone 9, so that no model exists without code
+that reads it.
 
 Validation errors from these models are surfaced by the CLI as
 :class:`hypersat.exceptions.ConfigurationError`.
@@ -28,6 +28,7 @@ __all__ = [
     "MorphologyConfig",
     "MorphologyKernelShape",
     "MorphologyOperation",
+    "OrthorectifyRequest",
     "OutputConfig",
     "PreviewComposite",
     "PreviewRequest",
@@ -35,6 +36,7 @@ __all__ = [
     "QualityMaskRequest",
     "ReprojectRequest",
     "ResamplingMethod",
+    "RpcTransformerOptions",
     "SpectralIndexName",
     "SpectralProfileRequest",
     "StretchConfig",
@@ -541,4 +543,98 @@ class ReprojectRequest(StrictModel):
         semantics = data.get("data_semantics", DataSemantics.CONTINUOUS)
         if semantics in (DataSemantics.CATEGORICAL, DataSemantics.CATEGORICAL.value):
             data = {**data, "resampling": ResamplingMethod.NEAREST}
+        return data
+
+
+class RpcTransformerOptions(StrictModel):
+    """GDAL RPC transformer options forwarded into the warp and echoed in output tags.
+
+    ``null`` / omitted values are left at GDAL defaults rather than forced to zero.
+    """
+
+    rpc_height_scale: float | None = None
+    """Metres; maps to ``RPC_HEIGHT_SCALE``."""
+    rpc_dem_missing_value: float | None = None
+    """Elevation substituted where the DEM has NoData; maps to ``RPC_DEM_MISSING_VALUE``."""
+    rpc_dem_apply_vdatum_shift: bool = False
+    """Maps to ``RPC_DEM_APPLY_VDATUM_SHIFT``."""
+
+
+class OrthorectifyRequest(StrictModel):
+    """Everything ``hypersat orthorectify`` needs to know.
+
+    Both an RPC sensor model and a DEM are mandatory. There is no fallback to plain
+    reprojection (see ``docs/orthorectification.md``).
+    """
+
+    product_path: Path
+    dem_path: Path
+    output: OutputConfig
+    target_crs: str = "auto"
+    resolution: Annotated[float, Field(gt=0.0)] = 30.0
+    resampling: ResamplingMethod = ResamplingMethod.BILINEAR
+    data_semantics: DataSemantics = DataSemantics.CONTINUOUS
+    mask_resampling: ResamplingMethod = ResamplingMethod.NEAREST
+    """Documented counterpart of the YAML key; categorical runs always use nearest."""
+    nodata: float | None = None
+    rpc_options: RpcTransformerOptions = RpcTransformerOptions()
+    error_threshold_px: Annotated[float, Field(gt=0.0)] = 0.125
+    warp_memory_mb: Annotated[int, Field(ge=1)] = 512
+    bands: tuple[int, ...] | None = None
+    snap_to_grid: bool = True
+    product_id: str | None = None
+    proj_autofix: bool = True
+
+    @field_validator("product_path")
+    @classmethod
+    def _expand_product_path(cls, value: Path) -> Path:
+        return value.expanduser()
+
+    @field_validator("dem_path")
+    @classmethod
+    def _expand_dem_path(cls, value: Path) -> Path:
+        return value.expanduser()
+
+    @field_validator("target_crs")
+    @classmethod
+    def _validate_target_crs(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("target_crs must not be empty; use 'auto' or an authority code")
+        return cleaned
+
+    @field_validator("bands")
+    @classmethod
+    def _validate_bands(cls, value: tuple[int, ...] | None) -> tuple[int, ...] | None:
+        if value is None:
+            return None
+        if not value:
+            raise ValueError("bands must not be empty")
+        invalid = sorted({index for index in value if index < 1})
+        if invalid:
+            raise ValueError(f"band indices are 1-based; got {invalid}")
+        return value
+
+    @field_validator("product_id")
+    @classmethod
+    def _validate_product_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("product_id must not be empty")
+        return cleaned
+
+    @model_validator(mode="before")
+    @classmethod
+    def _categorical_forces_nearest(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        semantics = data.get("data_semantics", DataSemantics.CONTINUOUS)
+        if semantics in (DataSemantics.CATEGORICAL, DataSemantics.CATEGORICAL.value):
+            data = {
+                **data,
+                "resampling": ResamplingMethod.NEAREST,
+                "mask_resampling": ResamplingMethod.NEAREST,
+            }
         return data
