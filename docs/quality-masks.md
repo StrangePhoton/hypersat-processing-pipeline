@@ -1,9 +1,9 @@
 # Quality mask specification
 
 The quality mask is a single-band `uint8` GeoTIFF built in **sensor geometry**, before
-orthorectification (rationale in `docs/architecture.md`). Implementation lands in
-milestone 6; this document fixes the contract now so that reports, tests and downstream
-code can rely on it.
+orthorectification (rationale in `docs/architecture.md`). Implemented in milestone 6 via
+`hypersat quality-mask` / `hypersat.processing.quality_mask`. This document is the class
+contract that reports, tests and downstream code rely on.
 
 ## 1. Class codes
 

@@ -76,7 +76,7 @@ by anything; they import nothing from the package.
 | `hypersat.io.reader` | Windowed, band-selective, masked reading with a memory budget | 3 (done) |
 | `hypersat.io.writer` | Atomic tiled/compressed GeoTIFF writing, metadata propagation | 3 (done) |
 | `hypersat.processing.validation` | Pre-flight product/DEM/output checks | 2 (done) |
-| `hypersat.processing.quality_mask` | Quality-class raster, OpenCV morphology | 6 |
+| `hypersat.processing.quality_mask` | Quality-class raster, OpenCV morphology | 6 (done) |
 | `hypersat.processing.reprojection` | CRS transform, alignment, resampling choice | 7 |
 | `hypersat.processing.orthorectification` | RPC + DEM warp | 8 |
 | `hypersat.analytics.bands` | Wavelength-to-index selection | 3 (done) |

@@ -117,6 +117,7 @@ ignore = [
 # Pure analytics helpers take arrays plus several keyword-only controls by design.
 "src/hypersat/analytics/profiles.py" = ["PLR0913"]
 "src/hypersat/analytics/statistics.py" = ["PLR0913"]
+"src/hypersat/processing/quality_mask.py" = ["PLR0913"]
 # The synthetic-raster builder is deliberately configurable across many raster properties.
 "tests/support/rasters.py" = ["PLR0912", "PLR0913"]
 

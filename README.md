@@ -33,7 +33,7 @@ reflects what actually runs today — planned features are marked as such, not a
 | NDVI / NDWI (wavelength-selected bands) | `hypersat calculate-index` | Working |
 | Pixel spectral profiles | `hypersat spectral-profile` | Working |
 | Per-band / index descriptive statistics | library API (+ `--statistics` on calculate-index) | Working |
-| Quality mask | `hypersat process` stage | Planned (milestone 6) |
+| Quality mask | `hypersat quality-mask` | Working |
 | Reprojection and grid alignment | library API | Planned (milestone 7) |
 | RPC + DEM orthorectification | `hypersat orthorectify` | Planned (milestone 8) |
 | YAML-driven pipeline | `hypersat process` | Planned (milestone 9) |
@@ -225,6 +225,13 @@ hypersat calculate-index --input data/samples/scene.tif --output-dir outputs/ind
 # Spectrum at one pixel (0-based row/col). Writes CSV + JSON.
 hypersat spectral-profile --input data/samples/scene.tif --output-dir outputs/profiles \
                           --row 120 --col 80 --window-size 1
+
+# Quality mask in sensor geometry (uint8 class codes; see docs/quality-masks.md).
+# Thresholds are product-specific configuration, not mission constants.
+hypersat quality-mask --input data/samples/scene.tif --output-dir outputs/qmask \
+                      --statistics
+hypersat quality-mask --input data/samples/scene.tif --output-dir outputs/qmask \
+                      --bands 1,2,3,4 --morphology --morphology-operation dilate
 ```
 
 `--json` writes to stdout while logs and diagnostics go to stderr, so a `--json` run can be
@@ -335,7 +342,7 @@ RPC metadata raises `MissingRPCMetadataError`; a missing or unreadable DEM raise
 ## Quality-mask classes
 
 Single-band `uint8`, one class per pixel, built in sensor geometry
-([docs/quality-masks.md](docs/quality-masks.md), implementation in milestone 6):
+([docs/quality-masks.md](docs/quality-masks.md)):
 
 | Code | Name | Meaning |
 | --- | --- | --- |

@@ -10,10 +10,12 @@ from pydantic import ValidationError
 
 from hypersat.models.config import (
     InputConfig,
+    MorphologyConfig,
     OutputConfig,
     PreviewComposite,
     PreviewRequest,
     ProductType,
+    QualityMaskRequest,
     StretchConfig,
     ValidationRequest,
     ValidationRequirements,
@@ -146,3 +148,32 @@ def test_blur_kernel_must_be_odd() -> None:
             output=OutputConfig(directory=Path("outputs")),
             blur_kernel=4,
         )
+
+
+def test_quality_mask_thresholds_must_be_ordered() -> None:
+    with pytest.raises(ValidationError, match="low_signal_dn"):
+        QualityMaskRequest(
+            product_path=Path("scene.tif"),
+            output=OutputConfig(directory=Path("outputs")),
+            low_signal_dn=100.0,
+            saturation_dn=50.0,
+        )
+
+
+def test_morphology_kernel_must_be_odd() -> None:
+    with pytest.raises(ValidationError, match="odd"):
+        MorphologyConfig(kernel_size=4)
+
+
+def test_quality_mask_defaults_match_pipeline_example() -> None:
+    request = QualityMaskRequest(
+        product_path=Path("scene.tif"),
+        output=OutputConfig(directory=Path("outputs")),
+    )
+
+    assert request.saturation_dn == 65535.0
+    assert request.low_signal_dn == 10.0
+    assert request.evaluation_wavelengths_nm == (490.0, 560.0, 665.0, 842.0)
+    assert request.saturation_band_fraction == pytest.approx(0.5)
+    assert request.morphology.enabled is False
+    assert request.spectral_anomaly is False

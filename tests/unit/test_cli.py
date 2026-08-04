@@ -46,6 +46,7 @@ def test_help_lists_the_implemented_commands(runner: CliRunner) -> None:
         "preview",
         "calculate-index",
         "spectral-profile",
+        "quality-mask",
     ):
         assert command in result.output
 
@@ -381,3 +382,28 @@ def test_spectral_profile_cli_writes_csv_and_json(
     assert payload["col"] == 2
     assert Path(payload["csv_path"]).is_file()
     assert Path(payload["json_path"]).is_file()
+
+
+def test_quality_mask_cli_writes_geotiff_and_statistics(
+    runner: CliRunner, sample_raster: Path, tmp_path: Path
+) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "quality-mask",
+            "--input",
+            str(sample_raster),
+            "--output-dir",
+            str(tmp_path),
+            "--bands",
+            "1,2,3",
+            "--statistics",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert Path(payload["path"]).is_file()
+    assert Path(payload["statistics_path"]).is_file()
+    assert "valid" in payload["counts"]

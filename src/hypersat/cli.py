@@ -26,15 +26,20 @@ from hypersat.logging_config import LogFormat, configure_logging, get_logger
 from hypersat.models.config import (
     IndexRequest,
     InputConfig,
+    MorphologyConfig,
+    MorphologyKernelShape,
+    MorphologyOperation,
     OutputConfig,
     PreviewComposite,
     PreviewRequest,
+    QualityMaskRequest,
     SpectralIndexName,
     SpectralProfileRequest,
     StretchConfig,
     ValidationRequest,
     ValidationRequirements,
 )
+from hypersat.processing.quality_mask import build_quality_mask
 from hypersat.processing.spectral import calculate_index, extract_spectral_profile
 from hypersat.processing.validation import raise_if_invalid, validate_request
 from hypersat.visualization.preview import render_preview
@@ -644,6 +649,175 @@ def spectral_profile_command(
         f"(row={result.profile.row}, col={result.profile.col}, "
         f"{len(result.profile.values)} band(s))"
     )
+
+
+def _parse_wavelengths(raw: str | None) -> tuple[float, ...] | None:
+    """Parse a comma-separated wavelength list.
+
+    An empty string means "use every band" (``None`` on the request model).
+    """
+    if raw is None:
+        return None
+    if not raw.strip():
+        return None
+    tokens = [token.strip() for token in raw.split(",") if token.strip()]
+    if not tokens:
+        raise typer.BadParameter("No wavelengths given.", param_hint="--evaluation-wavelengths-nm")
+    try:
+        return tuple(float(token) for token in tokens)
+    except ValueError as error:
+        raise typer.BadParameter(
+            f"Wavelengths must be numbers; got {raw!r}.",
+            param_hint="--evaluation-wavelengths-nm",
+        ) from error
+
+
+@app.command("quality-mask")
+def quality_mask_command(
+    input_path: InputOption,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory that receives the uint8 quality-mask GeoTIFF.",
+            show_default=False,
+        ),
+    ],
+    saturation_dn: Annotated[
+        float,
+        typer.Option("--saturation-dn", help="DN at or above this value is saturated."),
+    ] = 65535.0,
+    low_signal_dn: Annotated[
+        float,
+        typer.Option("--low-signal-dn", help="DN at or below this value is low signal."),
+    ] = 10.0,
+    band_fraction: Annotated[
+        float,
+        typer.Option(
+            "--band-fraction",
+            min=0.0,
+            max=1.0,
+            help="Fraction of evaluation bands that must meet a threshold.",
+        ),
+    ] = 0.5,
+    evaluation_wavelengths_nm: Annotated[
+        str | None,
+        typer.Option(
+            "--evaluation-wavelengths-nm",
+            help="Comma-separated target wavelengths, e.g. '490,560,665,842'. "
+            "Pass an empty string to evaluate every band. Ignored when --bands is set.",
+        ),
+    ] = "490,560,665,842",
+    bands: BandsOption = None,
+    morphology: Annotated[
+        bool,
+        typer.Option(
+            "--morphology/--no-morphology",
+            help="Apply morphological post-processing to defect classes.",
+        ),
+    ] = False,
+    morphology_operation: Annotated[
+        MorphologyOperation,
+        typer.Option("--morphology-operation", help="open | close | dilate | erode | none."),
+    ] = MorphologyOperation.CLOSE,
+    morphology_kernel_shape: Annotated[
+        MorphologyKernelShape,
+        typer.Option("--morphology-kernel-shape", help="rect | ellipse | cross."),
+    ] = MorphologyKernelShape.ELLIPSE,
+    morphology_kernel_size: Annotated[
+        int,
+        typer.Option("--morphology-kernel-size", min=1, help="Odd kernel size in pixels."),
+    ] = 3,
+    morphology_iterations: Annotated[
+        int,
+        typer.Option("--morphology-iterations", min=1, help="Morphology iterations."),
+    ] = 1,
+    spectral_anomaly: Annotated[
+        bool,
+        typer.Option(
+            "--spectral-anomaly/--no-spectral-anomaly",
+            help="Enable the optional high-CV spectral anomaly class.",
+        ),
+    ] = False,
+    anomaly_cv_threshold: Annotated[
+        float,
+        typer.Option(
+            "--anomaly-cv-threshold",
+            help="Coefficient-of-variation threshold for --spectral-anomaly.",
+        ),
+    ] = 2.0,
+    statistics: Annotated[
+        bool,
+        typer.Option(
+            "--statistics/--no-statistics",
+            help="Also write a JSON summary of per-class counts and percentages.",
+        ),
+    ] = False,
+    product_id: Annotated[
+        str | None,
+        typer.Option(
+            "--product-id",
+            help="Filename token; derived from the input path when omitted.",
+            show_default=False,
+        ),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace an existing quality-mask GeoTIFF."),
+    ] = False,
+    as_json: JsonFlag = False,
+    proj_autofix: ProjAutofixOption = True,
+) -> None:
+    """Build a uint8 quality mask in sensor geometry.
+
+    Class codes follow docs/quality-masks.md. Saturation and low-signal thresholds are
+    product-specific configuration, not mission-validated constants. Morphology is off by
+    default and, when enabled, grows defect classes only.
+    """
+    request = _build_model(
+        QualityMaskRequest,
+        product_path=input_path,
+        output=_build_model(OutputConfig, directory=output_dir, overwrite=overwrite),
+        saturation_dn=saturation_dn,
+        low_signal_dn=low_signal_dn,
+        saturation_band_fraction=band_fraction,
+        evaluation_wavelengths_nm=_parse_wavelengths(evaluation_wavelengths_nm),
+        bands=_parse_band_indices(bands),
+        morphology=_build_model(
+            MorphologyConfig,
+            enabled=morphology,
+            operation=morphology_operation,
+            kernel_shape=morphology_kernel_shape,
+            kernel_size=morphology_kernel_size,
+            iterations=morphology_iterations,
+        ),
+        spectral_anomaly=spectral_anomaly,
+        anomaly_cv_threshold=anomaly_cv_threshold,
+        include_statistics=statistics,
+        product_id=product_id,
+        proj_autofix=proj_autofix,
+    )
+    result = build_quality_mask(request)
+    payload = {
+        "path": str(result.path),
+        "band_indices": list(result.band_indices),
+        "wavelengths_nm": list(result.wavelengths_nm),
+        "counts": dict(result.counts),
+        "product_id": result.product_id,
+        "statistics_path": None if result.statistics_path is None else str(result.statistics_path),
+    }
+    if as_json:
+        typer.echo(json.dumps(payload, indent=2))
+        return
+    typer.echo(
+        f"wrote {result.path} "
+        f"(valid={result.counts.get('valid', 0)}, "
+        f"nodata={result.counts.get('no_data', 0)}, "
+        f"saturated={result.counts.get('saturated', 0)})"
+    )
+    if result.statistics_path is not None:
+        typer.echo(f"wrote {result.statistics_path}")
 
 
 def main() -> None:

@@ -1,7 +1,7 @@
 """Configuration models.
 
 Only the configuration that the currently implemented commands actually consume lives
-here. Stage options for orthorectification, masking and indices are documented in
+here. Stage options for orthorectification and the YAML pipeline runner are documented in
 ``configs/pipeline.example.yaml`` and become models when their stages are implemented,
 so that no model exists without code that reads it.
 
@@ -24,10 +24,14 @@ from hypersat.models.base import StrictModel
 __all__ = [
     "IndexRequest",
     "InputConfig",
+    "MorphologyConfig",
+    "MorphologyKernelShape",
+    "MorphologyOperation",
     "OutputConfig",
     "PreviewComposite",
     "PreviewRequest",
     "ProductType",
+    "QualityMaskRequest",
     "SpectralIndexName",
     "SpectralProfileRequest",
     "StretchConfig",
@@ -339,3 +343,106 @@ class SpectralProfileRequest(StrictModel):
         if not cleaned:
             raise ValueError("product_id must not be empty")
         return cleaned
+
+
+class MorphologyOperation(StrEnum):
+    """OpenCV morphology operations available for the quality mask."""
+
+    NONE = "none"
+    OPEN = "open"
+    CLOSE = "close"
+    DILATE = "dilate"
+    ERODE = "erode"
+
+
+class MorphologyKernelShape(StrEnum):
+    """Structuring-element shapes accepted by OpenCV."""
+
+    RECT = "rect"
+    ELLIPSE = "ellipse"
+    CROSS = "cross"
+
+
+class MorphologyConfig(StrictModel):
+    """Optional morphological post-processing of defect classes.
+
+    Disabled by default. When enabled, every parameter is explicit so the QC report can
+    state exactly what was done.
+    """
+
+    enabled: bool = False
+    operation: MorphologyOperation = MorphologyOperation.CLOSE
+    kernel_shape: MorphologyKernelShape = MorphologyKernelShape.ELLIPSE
+    kernel_size: Annotated[int, Field(ge=1)] = 3
+    iterations: Annotated[int, Field(ge=1)] = 1
+
+    @field_validator("kernel_size")
+    @classmethod
+    def _odd_kernel(cls, value: int) -> int:
+        if value % 2 == 0:
+            raise ValueError("kernel_size must be a positive odd integer")
+        return value
+
+
+class QualityMaskRequest(StrictModel):
+    """Everything ``hypersat quality-mask`` needs to know."""
+
+    product_path: Path
+    output: OutputConfig
+    saturation_dn: float = 65535.0
+    low_signal_dn: float = 10.0
+    evaluation_wavelengths_nm: tuple[float, ...] | None = (490.0, 560.0, 665.0, 842.0)
+    saturation_band_fraction: Annotated[float, Field(gt=0.0, le=1.0)] = 0.5
+    bands: tuple[int, ...] | None = None
+    """Optional explicit evaluation bands; overrides wavelength selection."""
+    tolerance_nm: Annotated[float, Field(ge=0.0)] = 20.0
+    morphology: MorphologyConfig = MorphologyConfig()
+    spectral_anomaly: bool = False
+    anomaly_cv_threshold: Annotated[float, Field(gt=0.0)] = 2.0
+    product_id: str | None = None
+    include_statistics: bool = False
+    proj_autofix: bool = True
+
+    @field_validator("product_path")
+    @classmethod
+    def _expand_product_path(cls, value: Path) -> Path:
+        return value.expanduser()
+
+    @field_validator("evaluation_wavelengths_nm")
+    @classmethod
+    def _validate_wavelengths(cls, value: tuple[float, ...] | None) -> tuple[float, ...] | None:
+        if value is None:
+            return None
+        if not value:
+            raise ValueError("evaluation_wavelengths_nm must not be empty; use null for every band")
+        if any(not math.isfinite(item) or item <= 0.0 for item in value):
+            raise ValueError("evaluation wavelengths must be finite and positive")
+        return value
+
+    @field_validator("bands")
+    @classmethod
+    def _validate_bands(cls, value: tuple[int, ...] | None) -> tuple[int, ...] | None:
+        if value is None:
+            return None
+        if not value:
+            raise ValueError("bands must not be empty")
+        invalid = sorted({index for index in value if index < 1})
+        if invalid:
+            raise ValueError(f"band indices are 1-based; got {invalid}")
+        return value
+
+    @field_validator("product_id")
+    @classmethod
+    def _validate_product_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("product_id must not be empty")
+        return cleaned
+
+    @model_validator(mode="after")
+    def _thresholds_ordered(self) -> Self:
+        if self.low_signal_dn >= self.saturation_dn:
+            raise ValueError("low_signal_dn must be strictly less than saturation_dn")
+        return self
