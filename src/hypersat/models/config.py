@@ -1,9 +1,9 @@
 """Configuration models.
 
 Only the configuration that the currently implemented commands actually consume lives
-here. Stage options for orthorectification and the YAML pipeline runner are documented in
-``configs/pipeline.example.yaml`` and become models when their stages are implemented,
-so that no model exists without code that reads it.
+here. Stage options for orthorectification and the YAML pipeline runner remain documented
+in ``configs/pipeline.example.yaml`` until those stages are implemented, so that no model
+exists without code that reads it.
 
 Validation errors from these models are surfaced by the CLI as
 :class:`hypersat.exceptions.ConfigurationError`.
@@ -22,6 +22,7 @@ from pydantic import Field, field_validator, model_validator
 from hypersat.models.base import StrictModel
 
 __all__ = [
+    "DataSemantics",
     "IndexRequest",
     "InputConfig",
     "MorphologyConfig",
@@ -32,6 +33,8 @@ __all__ = [
     "PreviewRequest",
     "ProductType",
     "QualityMaskRequest",
+    "ReprojectRequest",
+    "ResamplingMethod",
     "SpectralIndexName",
     "SpectralProfileRequest",
     "StretchConfig",
@@ -446,3 +449,96 @@ class QualityMaskRequest(StrictModel):
         if self.low_signal_dn >= self.saturation_dn:
             raise ValueError("low_signal_dn must be strictly less than saturation_dn")
         return self
+
+
+class ResamplingMethod(StrEnum):
+    """Supported warping kernels for continuous imagery."""
+
+    NEAREST = "nearest"
+    BILINEAR = "bilinear"
+    CUBIC = "cubic"
+
+
+class DataSemantics(StrEnum):
+    """How sample values should be treated during resampling.
+
+    Categorical data (quality masks, class maps) must use nearest-neighbour so that
+    class codes are never averaged into meaningless intermediates.
+    """
+
+    CONTINUOUS = "continuous"
+    CATEGORICAL = "categorical"
+
+
+class ReprojectRequest(StrictModel):
+    """Everything ``hypersat reproject`` needs to know.
+
+    Either ``target_crs`` (including ``auto`` for UTM) or ``reference_raster`` defines
+    the destination grid. When both are set, the reference supplies the grid and
+    ``target_crs`` must match the reference CRS (``auto`` means "use the reference").
+    """
+
+    product_path: Path
+    output: OutputConfig
+    target_crs: str = "auto"
+    resolution: Annotated[float, Field(gt=0.0)] | None = None
+    resampling: ResamplingMethod = ResamplingMethod.BILINEAR
+    data_semantics: DataSemantics = DataSemantics.CONTINUOUS
+    reference_raster: Path | None = None
+    snap_to_grid: bool = True
+    bands: tuple[int, ...] | None = None
+    nodata: float | None = None
+    product_id: str | None = None
+    proj_autofix: bool = True
+
+    @field_validator("product_path")
+    @classmethod
+    def _expand_product_path(cls, value: Path) -> Path:
+        return value.expanduser()
+
+    @field_validator("reference_raster")
+    @classmethod
+    def _expand_reference(cls, value: Path | None) -> Path | None:
+        if value is None:
+            return None
+        return value.expanduser()
+
+    @field_validator("target_crs")
+    @classmethod
+    def _validate_target_crs(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("target_crs must not be empty; use 'auto' or an authority code")
+        return cleaned
+
+    @field_validator("bands")
+    @classmethod
+    def _validate_bands(cls, value: tuple[int, ...] | None) -> tuple[int, ...] | None:
+        if value is None:
+            return None
+        if not value:
+            raise ValueError("bands must not be empty")
+        invalid = sorted({index for index in value if index < 1})
+        if invalid:
+            raise ValueError(f"band indices are 1-based; got {invalid}")
+        return value
+
+    @field_validator("product_id")
+    @classmethod
+    def _validate_product_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("product_id must not be empty")
+        return cleaned
+
+    @model_validator(mode="before")
+    @classmethod
+    def _categorical_forces_nearest(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        semantics = data.get("data_semantics", DataSemantics.CONTINUOUS)
+        if semantics in (DataSemantics.CATEGORICAL, DataSemantics.CATEGORICAL.value):
+            data = {**data, "resampling": ResamplingMethod.NEAREST}
+        return data

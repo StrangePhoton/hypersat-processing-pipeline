@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from hypersat.models.config import (
+    DataSemantics,
     InputConfig,
     MorphologyConfig,
     OutputConfig,
@@ -16,6 +17,8 @@ from hypersat.models.config import (
     PreviewRequest,
     ProductType,
     QualityMaskRequest,
+    ReprojectRequest,
+    ResamplingMethod,
     StretchConfig,
     ValidationRequest,
     ValidationRequirements,
@@ -177,3 +180,16 @@ def test_quality_mask_defaults_match_pipeline_example() -> None:
     assert request.saturation_band_fraction == pytest.approx(0.5)
     assert request.morphology.enabled is False
     assert request.spectral_anomaly is False
+
+
+def test_reproject_defaults() -> None:
+    request = ReprojectRequest(
+        product_path=Path("scene.tif"),
+        output=OutputConfig(directory=Path("outputs")),
+    )
+
+    assert request.target_crs == "auto"
+    assert request.resampling is ResamplingMethod.BILINEAR
+    assert request.data_semantics is DataSemantics.CONTINUOUS
+    assert request.snap_to_grid is True
+    assert request.reference_raster is None

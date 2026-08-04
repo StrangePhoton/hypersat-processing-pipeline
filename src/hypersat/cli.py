@@ -24,6 +24,7 @@ from hypersat.io.environment import describe_environment
 from hypersat.io.inspect import inspect_input
 from hypersat.logging_config import LogFormat, configure_logging, get_logger
 from hypersat.models.config import (
+    DataSemantics,
     IndexRequest,
     InputConfig,
     MorphologyConfig,
@@ -33,6 +34,8 @@ from hypersat.models.config import (
     PreviewComposite,
     PreviewRequest,
     QualityMaskRequest,
+    ReprojectRequest,
+    ResamplingMethod,
     SpectralIndexName,
     SpectralProfileRequest,
     StretchConfig,
@@ -40,6 +43,7 @@ from hypersat.models.config import (
     ValidationRequirements,
 )
 from hypersat.processing.quality_mask import build_quality_mask
+from hypersat.processing.reprojection import reproject_raster
 from hypersat.processing.spectral import calculate_index, extract_spectral_profile
 from hypersat.processing.validation import raise_if_invalid, validate_request
 from hypersat.visualization.preview import render_preview
@@ -818,6 +822,131 @@ def quality_mask_command(
     )
     if result.statistics_path is not None:
         typer.echo(f"wrote {result.statistics_path}")
+
+
+@app.command("reproject")
+def reproject_command(
+    input_path: InputOption,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory that receives the reprojected GeoTIFF.",
+            show_default=False,
+        ),
+    ],
+    target_crs: Annotated[
+        str,
+        typer.Option(
+            "--target-crs",
+            help="Destination CRS: 'auto' (UTM of scene centre) or an authority code "
+            "such as EPSG:32633. With --reference-raster, 'auto' inherits the reference CRS.",
+        ),
+    ] = "auto",
+    resolution: Annotated[
+        float | None,
+        typer.Option(
+            "--resolution",
+            help="Output ground sample distance in target-CRS units. Omit to let GDAL "
+            "choose from the source pixel size.",
+            show_default=False,
+        ),
+    ] = None,
+    resampling: Annotated[
+        ResamplingMethod,
+        typer.Option("--resampling", help="nearest | bilinear | cubic."),
+    ] = ResamplingMethod.BILINEAR,
+    data_semantics: Annotated[
+        DataSemantics,
+        typer.Option(
+            "--data-semantics",
+            help="continuous (default) or categorical. Categorical forces nearest.",
+        ),
+    ] = DataSemantics.CONTINUOUS,
+    reference_raster: Annotated[
+        Path | None,
+        typer.Option(
+            "--reference-raster",
+            help="Snap the output grid to this georeferenced raster's origin and resolution.",
+            show_default=False,
+        ),
+    ] = None,
+    snap_to_grid: Annotated[
+        bool,
+        typer.Option(
+            "--snap-to-grid/--no-snap-to-grid",
+            help="Snap the output origin to a whole multiple of the resolution.",
+        ),
+    ] = True,
+    bands: BandsOption = None,
+    nodata: Annotated[
+        float | None,
+        typer.Option(
+            "--nodata",
+            help="Destination NoData; omit to reuse the source NoData when defined.",
+            show_default=False,
+        ),
+    ] = None,
+    product_id: Annotated[
+        str | None,
+        typer.Option(
+            "--product-id",
+            help="Filename token; derived from the input path when omitted.",
+            show_default=False,
+        ),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace an existing reprojected GeoTIFF."),
+    ] = False,
+    as_json: JsonFlag = False,
+    proj_autofix: ProjAutofixOption = True,
+) -> None:
+    """Reproject a map-geometry raster, optionally aligning to a reference grid.
+
+    This is map-to-map warping only. Sensor-geometry products (RPC, no affine CRS) are
+    refused — use orthorectification for those. Categorical rasters (quality masks) should
+    pass ``--data-semantics categorical`` so class codes are nearest-neighbour resampled.
+    """
+    request = _build_model(
+        ReprojectRequest,
+        product_path=input_path,
+        output=_build_model(OutputConfig, directory=output_dir, overwrite=overwrite),
+        target_crs=target_crs,
+        resolution=resolution,
+        resampling=resampling,
+        data_semantics=data_semantics,
+        reference_raster=reference_raster,
+        snap_to_grid=snap_to_grid,
+        bands=_parse_band_indices(bands),
+        nodata=nodata,
+        product_id=product_id,
+        proj_autofix=proj_autofix,
+    )
+    result = reproject_raster(request)
+    payload = {
+        "path": str(result.path),
+        "crs": result.crs_authority,
+        "resolution": result.resolution,
+        "width": result.width,
+        "height": result.height,
+        "band_indices": list(result.band_indices),
+        "resampling": result.resampling.value,
+        "snapped": result.snapped,
+        "reference_raster": (
+            None if result.reference_raster is None else str(result.reference_raster)
+        ),
+        "product_id": result.product_id,
+    }
+    if as_json:
+        typer.echo(json.dumps(payload, indent=2))
+        return
+    typer.echo(
+        f"wrote {result.path} "
+        f"({result.crs_authority}, {result.resolution:g} units/px, "
+        f"{result.width}x{result.height}, {result.resampling.value})"
+    )
 
 
 def main() -> None:

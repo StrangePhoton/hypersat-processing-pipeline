@@ -7,7 +7,7 @@ Modules:
   (implemented).
 * ``quality_mask`` - quality-class raster and optional OpenCV morphology (implemented).
 * ``reprojection`` - CRS transformation, grid alignment and resampling selection
-  (milestone 7).
+  (implemented).
 * ``orthorectification`` - RPC + DEM warping (milestone 8, see
   ``docs/orthorectification.md``).
 """

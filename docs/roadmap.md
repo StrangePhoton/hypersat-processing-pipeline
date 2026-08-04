@@ -11,7 +11,7 @@ the next one starts. Status is kept honest: the README's capability table mirror
 | 4 | Previews and OpenCV preprocessing | Percentile stretching, RGB and false-colour composites, single-band previews, configurable OpenCV resize/blur with explicit kernel sizes; `hypersat preview` | Done |
 | 5 | Spectral analytics | NDVI and NDWI with safe division and NoData propagation, pixel spectral profiles, per-band descriptive statistics; `hypersat calculate-index`, `hypersat spectral-profile` | Done |
 | 6 | Quality mask | Class raster per `docs/quality-masks.md`, configurable OpenCV morphology, built in sensor geometry; `hypersat quality-mask` | Done |
-| 7 | Reprojection and raster alignment | CRS reprojection, output-transform calculation, resolution control, alignment to a reference grid, bounds validation, resampling choice by data semantics, automatic UTM selection | Planned |
+| 7 | Reprojection and raster alignment | CRS reprojection, output-transform calculation, resolution control, alignment to a reference grid, bounds validation, resampling choice by data semantics, automatic UTM selection; `hypersat reproject` | Done |
 | 8 | RPC + DEM orthorectification | RPC sensor model plus DEM warp through GDAL, explicit failure when the sensor model or the DEM is unusable, logged transformer configuration; `hypersat orthorectify` | Planned |
 | 9 | Pipeline orchestration and YAML config | `Stage` protocol, sequential runner with timing and failure isolation, YAML-driven `hypersat process` | Planned |
 | 10 | QC report and showcase | JSON quality-control report with per-stage timings and output checksums, end-to-end integration test, README example outputs from a real EnMAP scene, `external`-marked real-product test | Planned |

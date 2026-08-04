@@ -34,7 +34,7 @@ reflects what actually runs today — planned features are marked as such, not a
 | Pixel spectral profiles | `hypersat spectral-profile` | Working |
 | Per-band / index descriptive statistics | library API (+ `--statistics` on calculate-index) | Working |
 | Quality mask | `hypersat quality-mask` | Working |
-| Reprojection and grid alignment | library API | Planned (milestone 7) |
+| Reprojection and grid alignment | `hypersat reproject` | Working |
 | RPC + DEM orthorectification | `hypersat orthorectify` | Planned (milestone 8) |
 | YAML-driven pipeline | `hypersat process` | Planned (milestone 9) |
 | JSON QC report | `hypersat process` | Planned (milestone 10) |
@@ -232,6 +232,14 @@ hypersat quality-mask --input data/samples/scene.tif --output-dir outputs/qmask 
                       --statistics
 hypersat quality-mask --input data/samples/scene.tif --output-dir outputs/qmask \
                       --bands 1,2,3,4 --morphology --morphology-operation dilate
+
+# Map-to-map reprojection / optional reference-grid alignment.
+# Sensor-geometry (RPC) products are refused — use orthorectify for those.
+hypersat reproject --input data/samples/scene.tif --output-dir outputs/reproject \
+                   --target-crs auto --resolution 30
+hypersat reproject --input data/samples/scene.tif --output-dir outputs/reproject \
+                   --reference-raster data/samples/reference_grid.tif \
+                   --data-semantics categorical --resampling nearest
 ```
 
 `--json` writes to stdout while logs and diagnostics go to stderr, so a `--json` run can be
